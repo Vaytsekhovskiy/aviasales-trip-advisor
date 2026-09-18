@@ -13,8 +13,8 @@ import java.util.List;
  *   java -jar avia-seasonality.jar MOW BKK 123abc456token rub
  *
  * Результат:
- *   heatmap.html   — тепловая карта "месяц x день недели"
- *   raw_prices.csv — сырые данные для дальнейшего анализа (pandas/Excel)
+ *   heatmap_ORIGIN_DESTINATION.html   — тепловая карта "месяц x день недели"
+ *   raw_prices_ORIGIN_DESTINATION.csv — сырые данные для дальнейшего анализа (pandas/Excel)
  */
 public class Main {
 
@@ -22,6 +22,7 @@ public class Main {
         if (args.length < 3) {
             System.err.println("Использование: java -jar avia-seasonality.jar <ORIGIN> <DESTINATION> <TOKEN> [CURRENCY]");
             System.err.println("Пример:        java -jar avia-seasonality.jar MOW BKK YOUR_TOKEN rub");
+            System.err.println("java -jar avia-seasonality.jar MOW YOUR_TOKEN rub");
             System.exit(1);
         }
 
@@ -41,12 +42,14 @@ public class Main {
             }
             System.out.println("Получено дат с ценами: " + entries.size());
 
-            writeCsv(Path.of("raw_prices.csv"), entries);
-            System.out.println("Сырые данные сохранены в raw_prices.csv");
+            String csvFileName = String.format("raw_prices_%s_%s.csv", origin, destination);
+            writeCsv(Path.of(csvFileName), entries);
+            System.out.println("Сырые данные сохранены в " + csvFileName);
 
+            String heatmapFileName = String.format("heatmap_%s_%s.html", origin, destination);
             SeasonalityAggregator agg = new SeasonalityAggregator(entries);
-            HeatmapHtmlRenderer.render(Path.of("heatmap.html"), origin, destination, currency, agg);
-            System.out.println("Тепловая карта сохранена в heatmap.html — откройте её в браузере.");
+            HeatmapHtmlRenderer.render(Path.of(heatmapFileName), origin, destination, currency, agg);
+            System.out.println("Тепловая карта сохранена в " + heatmapFileName + " — откройте её в браузере.");
 
         } catch (IOException | InterruptedException e) {
             System.err.println("Ошибка: " + e.getMessage());
