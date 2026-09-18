@@ -78,10 +78,57 @@ public class AviasalesClient {
                 int price = day.optInt("price", -1);
                 int transfers = day.optInt("transfers", -1);
                 if (price > 0) {
-                    result.add(new PriceEntry(date, price, transfers));
+                    result.add(new PriceEntry(date, price, transfers, destination));
                 }
             } catch (Exception e) {
                 // Пропускаем некорректные записи, не роняем весь разбор
+                System.err.println("Пропущена запись " + dateKey + ": " + e.getMessage());
+            }
+        }
+        return result;
+    }
+
+    public List<PriceEntry> fetchYearCalendarAnyDestination(String origin, String currency)
+            throws IOException, InterruptedException {
+
+        String url = BASE_URL
+                + "?origin=" + enc(origin)
+                + "&departure_date="
+                + "&calendar_type=departure_date"
+                + "&currency=" + enc(currency)
+                + "&token=" + enc(token);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build();
+
+        HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        String bodyText = decodeBody(response);
+
+        if (response.statusCode() != 200) {
+            throw new IOException("Aviasales API вернул код " + response.statusCode() + ": " + bodyText);
+        }
+
+        JSONObject root = new JSONObject(bodyText);
+        if (!root.optBoolean("success", false)) {
+            throw new IOException("Aviasales API success=false, тело ответа: " + bodyText);
+        }
+
+        JSONObject data = root.getJSONObject("data");
+        List<PriceEntry> result = new ArrayList<>();
+
+        for (String dateKey : data.keySet()) {
+            JSONObject day = data.getJSONObject(dateKey);
+            try {
+                LocalDate date = LocalDate.parse(dateKey);
+                int price = day.optInt("price", -1);
+                int transfers = day.optInt("transfers", -1);
+                String destination = day.optString("destination", "").toUpperCase();
+                if (price > 0 && !destination.isBlank()) {
+                    result.add(new PriceEntry(date, price, transfers, destination));
+                }
+            } catch (Exception e) {
                 System.err.println("Пропущена запись " + dateKey + ": " + e.getMessage());
             }
         }

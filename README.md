@@ -21,19 +21,23 @@ mvn clean package
 
 ```bash
 java -jar target/avia-seasonality.jar MOW BKK ВАШ_ТОКЕН rub
+java -jar target/avia-seasonality.jar MOW ВАШ_ТОКЕН rub
 ```
 
 Параметры:
 - `ORIGIN` — IATA-код города вылета (например, `MOW` — Москва)
-- `DESTINATION` — IATA-код города назначения (например, `BKK` — Бангкок)
+- `DESTINATION` — IATA-код города назначения (например, `BKK` — Бангкок), опционален
 - `TOKEN` — партнёрский API-ключ
 - `CURRENCY` — необязательно, по умолчанию `rub`
 
 ## Результат
-- `heatmap.html` — самодостаточная HTML-страница с тепловой картой
-  (открыть в любом браузере, интернет не нужен)
-- `raw_prices.csv` — сырые данные (дата, цена, пересадки, месяц, день недели)
-  для дальнейшего анализа в pandas/Excel, если захотите развить проект
+Режим с `DESTINATION`:
+- `heatmap_ORIGIN_DESTINATION.html` — тепловая карта "когда дешевле лететь" по выбранному направлению
+- `raw_prices_ORIGIN_DESTINATION.csv` — сырые данные
+
+Режим без `DESTINATION`:
+- `heatmap_ORIGIN_any_destination.html` — тепловая карта "куда дешевле лететь" (в ячейке направление + средняя цена)
+- `raw_prices_ORIGIN_any.csv` — сырые данные по разным направлениям
 
 ## Как это устроено
 Используется метод `/v1/prices/calendar` с пустым `departure_date` —
