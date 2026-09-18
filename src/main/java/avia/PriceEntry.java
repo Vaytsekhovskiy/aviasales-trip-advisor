@@ -5,9 +5,9 @@ import java.time.DayOfWeek;
 
 /**
  * Одна запись из ответа /v1/prices/calendar: дата вылета + цена.
- * destination может быть null/пустым в режиме запроса конкретного направления.
+ * destinationName — человеко-читаемое название города назначения (если известно).
  */
-public record PriceEntry(LocalDate date, int price, int transfers, String destination) {
+public record PriceEntry(LocalDate date, int price, int transfers, String destination, String destinationName) {
 
     public int monthIndex() {
         return date.getMonthValue(); // 1..12

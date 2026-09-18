@@ -78,7 +78,8 @@ public class AviasalesClient {
                 int price = day.optInt("price", -1);
                 int transfers = day.optInt("transfers", -1);
                 if (price > 0) {
-                    result.add(new PriceEntry(date, price, transfers, destination));
+                    String destinationName = DestinationNames.resolve(destination, null);
+                    result.add(new PriceEntry(date, price, transfers, destination, destinationName));
                 }
             } catch (Exception e) {
                 // Пропускаем некорректные записи, не роняем весь разбор
@@ -125,8 +126,10 @@ public class AviasalesClient {
                 int price = day.optInt("price", -1);
                 int transfers = day.optInt("transfers", -1);
                 String destination = day.optString("destination", "").toUpperCase();
+                String apiDestinationName = day.optString("destination_name", "");
                 if (price > 0 && !destination.isBlank()) {
-                    result.add(new PriceEntry(date, price, transfers, destination));
+                    String destinationName = DestinationNames.resolve(destination, apiDestinationName);
+                    result.add(new PriceEntry(date, price, transfers, destination, destinationName));
                 }
             } catch (Exception e) {
                 System.err.println("Пропущена запись " + dateKey + ": " + e.getMessage());

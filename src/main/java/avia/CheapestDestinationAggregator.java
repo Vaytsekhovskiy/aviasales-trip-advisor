@@ -12,7 +12,7 @@ import java.util.Map;
  */
 public class CheapestDestinationAggregator {
 
-    public record Cell(String destination, double avgPrice, int sampleCount) {
+    public record Cell(String destination, String destinationName, double avgPrice, int sampleCount) {
         public boolean isEmpty() {
             return destination == null || destination.isBlank() || sampleCount == 0;
         }
@@ -36,7 +36,7 @@ public class CheapestDestinationAggregator {
             int monthIdx = e.monthIndex() - 1;
             int dayIdx = weekdayIndex(e.dayOfWeek());
             buckets[monthIdx][dayIdx]
-                    .computeIfAbsent(e.destination(), __ -> new DestinationStats())
+                    .computeIfAbsent(e.destination(), __ -> new DestinationStats(e.destinationName()))
                     .add(e.price());
         }
 
@@ -53,12 +53,12 @@ public class CheapestDestinationAggregator {
 
     private static Cell summarize(Map<String, DestinationStats> statsByDestination) {
         if (statsByDestination.isEmpty()) {
-            return new Cell(null, 0, 0);
+            return new Cell(null, null, 0, 0);
         }
         return statsByDestination.entrySet().stream()
-                .map(e -> new Cell(e.getKey(), e.getValue().avg(), e.getValue().count))
+                .map(e -> new Cell(e.getKey(), e.getValue().name, e.getValue().avg(), e.getValue().count))
                 .min(Comparator.comparingDouble(Cell::avgPrice))
-                .orElse(new Cell(null, 0, 0));
+                .orElse(new Cell(null, null, 0, 0));
     }
 
     private static int weekdayIndex(DayOfWeek dow) {
@@ -69,8 +69,13 @@ public class CheapestDestinationAggregator {
     }
 
     private static class DestinationStats {
+        private final String name;
         private long sum;
         private int count;
+
+        private DestinationStats(String name) {
+            this.name = name;
+        }
 
         void add(int price) {
             sum += price;

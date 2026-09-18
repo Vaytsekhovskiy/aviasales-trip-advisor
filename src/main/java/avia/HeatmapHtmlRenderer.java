@@ -122,7 +122,8 @@ public class HeatmapHtmlRenderer {
                     String color = colorFor(cell.avgPrice(), min, max);
                     html.append("<td style='background:").append(color).append("' title='n=")
                             .append(cell.sampleCount()).append("'>")
-                            .append(cell.destination()).append(" (").append(Math.round(cell.avgPrice())).append(")")
+                            .append(cell.destination()).append(" — ").append(cell.destinationName())
+                            .append(" (").append(Math.round(cell.avgPrice())).append(")")
                             .append("</td>");
                 }
             }
