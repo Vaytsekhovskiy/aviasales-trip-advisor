@@ -3,23 +3,37 @@ package avia;
 import java.io.IOException;
 import java.io.PrintWriter;
 import java.nio.file.Path;
+import java.util.Arrays;
 import java.util.List;
 
 /**
  * Использование:
  *   java -jar avia-seasonality.jar <ORIGIN> <DESTINATION> <TOKEN> [CURRENCY]
  *   java -jar avia-seasonality.jar <ORIGIN> <TOKEN> [CURRENCY]
+ *   java -jar avia-seasonality.jar --transfers <ORIGIN> <TOKEN> [CURRENCY]
  *
  * Пример:
  *   java -jar avia-seasonality.jar MOW BKK 123abc456token rub
+ *   java -jar avia-seasonality.jar --transfers MOW 123abc456token rub
  *
  * Результат:
  *   heatmap_ORIGIN_DESTINATION.html   — тепловая карта "месяц x день недели"
  *   raw_prices_ORIGIN_DESTINATION.csv — сырые данные для дальнейшего анализа (pandas/Excel)
+ *
+ *   Режим --transfers сравнивает стоимость прямых и пересадочных рейсов
+ *   по всем направлениям из ORIGIN:
+ *   transfers_comparison_ORIGIN.html — диаграмма + таблица сравнения
+ *   transfers_comparison_ORIGIN.csv  — агрегированные данные сравнения
+ *   raw_transfers_ORIGIN.csv         — сырые предложения по каждому направлению/числу пересадок
  */
 public class Main {
 
     public static void main(String[] args) {
+        if (args.length > 0 && args[0].equalsIgnoreCase("--transfers")) {
+            runTransfersMode(Arrays.copyOfRange(args, 1, args.length));
+            return;
+        }
+
         if (args.length < 2 || args.length > 4) {
             printUsageAndExit();
         }
@@ -83,6 +97,87 @@ public class Main {
             System.err.println("Ошибка: " + e.getMessage());
             System.exit(1);
         }
+    }
+
+    private static void runTransfersMode(String[] args) {
+        if (args.length < 2 || args.length > 3) {
+            printTransfersUsageAndExit();
+        }
+
+        String origin = args[0].toUpperCase();
+        String token = args[1];
+        String currency = args.length == 3 ? args[2] : "rub";
+
+        if (origin.isBlank() || token.isBlank()) {
+            printTransfersUsageAndExit();
+        }
+
+        try {
+            AviasalesClient client = new AviasalesClient(token);
+            System.out.println("Запрашиваю дешёвые билеты (прямые / 1 пересадка / 2 пересадки) из "
+                    + origin + " по всем направлениям ...");
+            List<TransferOffer> offers = client.fetchCheapestByTransfers(origin, currency);
+
+            if (offers.isEmpty()) {
+                System.err.println("API не вернул данных. Проверьте параметры, токен и лимиты запросов.");
+                System.exit(2);
+            }
+            System.out.println("Получено предложений: " + offers.size());
+
+            String rawCsvFileName = String.format("raw_transfers_%s.csv", origin);
+            writeRawTransfersCsv(Path.of(rawCsvFileName), offers);
+            System.out.println("Сырые данные сохранены в " + rawCsvFileName);
+
+            TransferComparisonAggregator agg = new TransferComparisonAggregator(offers);
+
+            String comparisonCsvFileName = String.format("transfers_comparison_%s.csv", origin);
+            writeComparisonCsv(Path.of(comparisonCsvFileName), agg.comparisons());
+            System.out.println("Сравнительная таблица сохранена в " + comparisonCsvFileName);
+
+            String htmlFileName = String.format("transfers_comparison_%s.html", origin);
+            TransferComparisonHtmlRenderer.render(Path.of(htmlFileName), origin, currency, agg.comparisons());
+            System.out.println("Диаграмма сравнения сохранена в " + htmlFileName + " — откройте её в браузере.");
+
+        } catch (IOException | InterruptedException e) {
+            System.err.println("Ошибка: " + e.getMessage());
+            System.exit(1);
+        }
+    }
+
+    private static void writeRawTransfersCsv(Path path, List<TransferOffer> offers) throws IOException {
+        try (PrintWriter pw = new PrintWriter(Files_newBufferedWriter(path))) {
+            pw.println("destination,destination_name,transfers,price");
+            for (TransferOffer o : offers) {
+                pw.printf("%s,%s,%d,%d%n", o.destination(), o.destinationName(), o.transfers(), o.price());
+            }
+        }
+    }
+
+    private static void writeComparisonCsv(Path path, List<TransferComparisonAggregator.Comparison> comparisons)
+            throws IOException {
+        try (PrintWriter pw = new PrintWriter(Files_newBufferedWriter(path))) {
+            pw.println("destination,destination_name,direct_price,one_stop_price,two_stop_price,"
+                    + "cheapest_connecting_price,markup_abs,markup_pct");
+            for (var c : comparisons) {
+                pw.printf("%s,%s,%s,%s,%s,%s,%s,%s%n",
+                        c.destination(), c.destinationName(),
+                        str(c.directPrice()), str(c.oneStopPrice()), str(c.twoStopPrice()),
+                        str(c.cheapestConnectingPrice()), str(c.markupAbs()),
+                        c.markupPct() == null ? "" : String.format("%.1f", c.markupPct()));
+            }
+        }
+    }
+
+    private static String str(Integer value) {
+        return value == null ? "" : String.valueOf(value);
+    }
+
+    private static void printTransfersUsageAndExit() {
+        System.err.println("Использование:");
+        System.err.println("  java -jar avia-seasonality.jar --transfers <ORIGIN> <TOKEN> [CURRENCY]");
+        System.err.println("Пример:");
+        System.err.println("  java -jar avia-seasonality.jar --transfers MOW YOUR_TOKEN rub");
+        System.exit(1);
     }
 
     private static void writeCsv(Path path, List<PriceEntry> entries) throws IOException {

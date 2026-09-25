@@ -138,6 +138,67 @@ public class AviasalesClient {
         return result;
     }
 
+    /**
+     * Метод "Дешёвые билеты" (v1/prices/cheap) с destination="-": одним запросом
+     * отдаёт по КАЖДОМУ направлению из origin до трёх предложений, сгруппированных
+     * по числу пересадок (ключи "0"/"1"/"2" = прямой рейс/1 пересадка/2 пересадки).
+     * Именно это позволяет сравнить прямые и пересадочные рейсы по разным
+     * направлениям без накопления собственной истории цен.
+     */
+    public List<TransferOffer> fetchCheapestByTransfers(String origin, String currency)
+            throws IOException, InterruptedException {
+
+        String url = "https://api.travelpayouts.com/v1/prices/cheap"
+                + "?origin=" + enc(origin)
+                + "&destination=-"
+                + "&currency=" + enc(currency)
+                + "&token=" + enc(token);
+
+        HttpRequest request = HttpRequest.newBuilder()
+                .uri(URI.create(url))
+                .GET()
+                .build();
+
+        HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        String bodyText = decodeBody(response);
+
+        if (response.statusCode() != 200) {
+            throw new IOException("Aviasales API вернул код " + response.statusCode() + ": " + bodyText);
+        }
+
+        JSONObject root = new JSONObject(bodyText);
+        if (!root.optBoolean("success", false)) {
+            throw new IOException("Aviasales API success=false, тело ответа: " + bodyText);
+        }
+
+        JSONObject data = root.getJSONObject("data");
+        List<TransferOffer> result = new ArrayList<>();
+
+        for (String destinationKey : data.keySet()) {
+            String destination = destinationKey.toUpperCase();
+            String destinationName = DestinationNames.resolve(destination, null);
+            JSONObject byTransfers = data.getJSONObject(destinationKey);
+
+            for (String transfersKey : byTransfers.keySet()) {
+                try {
+                    int transfers = Integer.parseInt(transfersKey);
+                    if (transfers < 0 || transfers > 2) {
+                        continue;
+                    }
+                    JSONObject offer = byTransfers.getJSONObject(transfersKey);
+                    int price = offer.optInt("price", -1);
+                    if (price > 0) {
+                        result.add(new TransferOffer(destination, destinationName, transfers, price));
+                    }
+                } catch (NumberFormatException e) {
+                    System.err.println("Пропущен неожиданный ключ '" + transfersKey
+                            + "' для направления " + destination);
+                }
+            }
+        }
+        return result;
+    }
+
     private static String enc(String s) {
         return URLEncoder.encode(s, StandardCharsets.UTF_8);
     }
