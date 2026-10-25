@@ -1,5 +1,35 @@
 # Дашборд сезонности цен (Aviasales / Travelpayouts API)
 
+## Историческая статистика регулярного рейса
+
+`FlightHistoryAggregator.aggregate(List<FlightRecord>)` возвращает карту
+`flightServiceKey -> FlightHistoricalStats`, где ключ — `airlineIata|flightNumber|originIata|destinationIata`.
+`aggregateFor(flights, "DP", "6525", "SVO", "OVB")` возвращает `Optional` для одного рейса.
+
+Перед группировкой выбирается одна запись на `flightId`: самая поздняя по `collectedAtUtc`,
+затем наиболее полная (задержки и scheduled departure local), затем наблюдение вылета,
+затем порядок `FlightRecord.toString()` — та же стратегия, что у `DelayAnalyzer`.
+Поля разных наблюдений не объединяются. Строки без ID или полного ключа исключаются.
+Компоненты ключа используются как есть; пустые компоненты и компоненты с `|` не допускаются.
+
+`sampleSize` включает отмены и записи без задержек. Каждая метрика задержки использует
+свои ненулевые значения неотменённых рейсов, без дополнительного фильтра по статусу.
+При отсутствии значений медиана, среднее и вероятности равны `null`.
+Пороги вероятностей строгие (`> 15/30/60`); доля отмен делится на `sampleSize`.
+Компенсация — задержка вылета минус задержка прилёта, только при наличии обеих в одной записи.
+Ограничение по датам задаётся входным списком, сам агрегатор даты не фильтрует.
+
+Standalone smoke-test без дополнительных зависимостей (JDK 17+, из корня проекта):
+
+```powershell
+javac -encoding UTF-8 --release 17 -d target/history-test -sourcepath "src/main/java;src/test/java" src/test/java/avia/FlightHistoryAggregatorTest.java
+java -cp target/history-test avia.FlightHistoryAggregatorTest
+# Необязательно: прочитать локальные CSV за 2026-09-27 — 2026-10-03 и вывести DP 6525.
+java -cp target/history-test avia.FlightHistoryAggregatorTest data/flights
+```
+
+Тест запускается отдельно от `mvn test`, сетевых запросов не делает.
+
 ## Модуль задержек рейсов (ветка task3)
 
 Добавлен pipeline AeroDataBox FIDS → нормализация → отдельные CSV batches.
