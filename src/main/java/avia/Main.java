@@ -34,6 +34,16 @@ public class Main {
             return;
         }
 
+        if (args.length > 0 && args[0].equalsIgnoreCase("--clean")) {
+            Cleaner.main(Arrays.copyOfRange(args, 1, args.length));
+            return;
+        }
+
+        if (args.length > 0 && args[0].equalsIgnoreCase("--mongo")) {
+            MongoMain.main(Arrays.copyOfRange(args, 1, args.length));
+            return;
+        }
+
         if (args.length < 2 || args.length > 4) {
             printUsageAndExit();
         }
