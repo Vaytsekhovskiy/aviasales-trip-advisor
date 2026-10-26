@@ -75,16 +75,16 @@ public class Collector {
         String base = "https://api.travelpayouts.com";
         String route = "origin=" + origin + "&destination=" + dest;
         Map<String, String> m = new LinkedHashMap<>();
-        m.put("raw_calendar", base + "/v1/prices/calendar?" + route
-                + "&departure_date=&calendar_type=departure_date&currency=" + cur);
+        // m.put("raw_calendar", base + "/v1/prices/calendar?" + route
+        //         + "&departure_date=&calendar_type=departure_date&currency=" + cur);
         m.put("raw_prices_for_dates", base + "/aviasales/v3/prices_for_dates?" + route
-                + "&direct=false&sorting=price&limit=1000&currency=" + cur);
-        m.put("raw_grouped", base + "/aviasales/v3/grouped_prices?" + route
-                + "&currency=" + cur + "&group_by=departure_at");
-        m.put("raw_latest", base + "/aviasales/v3/get_latest_prices?" + route
-                + "&sorting=price&page=1&currency=" + cur);
-        m.put("raw_matrix", base + "/v2/prices/nearest-places-matrix?" + route
-                + "&distance=1000&limit=5");
+                + "&direct=false&sorting=price&limit=1&currency=" + cur);
+        // m.put("raw_grouped", base + "/aviasales/v3/grouped_prices?" + route
+        //         + "&currency=" + cur + "&group_by=departure_at");
+        // m.put("raw_latest", base + "/aviasales/v3/get_latest_prices?" + route
+        //         + "&sorting=price&page=1&currency=" + cur);
+        // m.put("raw_matrix", base + "/v2/prices/nearest-places-matrix?" + route
+        //         + "&distance=1000&limit=5");
         return m;
     }
 
@@ -92,7 +92,10 @@ public class Collector {
     private static void collectOne(MongoDatabase db, String collection, String route,
                                    String url, String token, Date collectedAt) {
         try {
+            System.out.println("Запрашиваю Aviasales: " + collection);
             JSONObject root = get(url + "&token=" + token);
+            System.out.println("Ответ Aviasales получен: " + collection
+                    + ", success=" + root.opt("success"));
 
             List<Document> docs = new ArrayList<>();
             for (JSONObject offer : extractOffers(root)) {
@@ -108,6 +111,7 @@ public class Collector {
             }
 
             try {
+                System.out.println("Записываю в MongoDB: " + collection);
                 db.getCollection(collection).insertMany(docs);
             } catch (Exception mongoError) {
                 saveToFile(collection, docs);

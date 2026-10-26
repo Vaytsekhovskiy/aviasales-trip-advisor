@@ -1,5 +1,44 @@
 # Дашборд сезонности цен (Aviasales / Travelpayouts API)
 
+## Объединение предложения Aviasales с историей рейса
+
+Локальный proof-of-concept принимает JSON `prices_for_dates` без HTTP-запросов:
+
+```java
+var offers = new AviasalesFlightPreprocessor().process(json);
+var history = new FlightHistoryAggregator().aggregate(flightRecords);
+var enriched = new FlightEnrichmentService().enrich(offers, history);
+```
+
+`AviasalesFlightOffer` нормализует IATA и валюту в uppercase, убирает пробелы,
+удаляет префикс авиакомпании из номера рейса. Ключ — `airlineIata|flightNumber|originAirport|destinationAirport`.
+Parser использует поля аэропортов `origin_airport` / `destination_airport`, а валюту берёт
+из верхнего уровня ответа. Некорректные строки (включая отсутствующие ключевые поля,
+время или числовые значения) пропускаются; ошибка структуры ответа или `success=false` вызывает исключение.
+
+`EnrichedFlightOffer.offer()` содержит исходное нормализованное предложение,
+`historicalStats()` — исторические метрики. `matchStatus()` возвращает `MATCHED` или `NOT_MATCHED`.
+Объединение выполняется строго по `flightServiceKey`, без даты, времени и цены.
+Предложения без истории сохраняются с `historicalStats=null`, порядок предложений сохраняется.
+Для предложений с пересадками этот PoC не восстанавливает отдельные сегменты маршрута.
+
+Standalone-проверка с существующей зависимостью `org.json` (JDK 17+, из корня проекта):
+
+```powershell
+$jsonJar = "$env:USERPROFILE/.m2/repository/org/json/json/20240303/json-20240303.jar"
+javac -encoding UTF-8 --release 17 -cp "$jsonJar" -d target/enrichment-test -sourcepath "src/main/java;src/test/java" src/test/java/avia/FlightEnrichmentTest.java
+java -cp "target/enrichment-test;$jsonJar" avia.FlightEnrichmentTest
+# Дополнительно: проверка полного локального недельного среза и вывод итогового объекта.
+java -cp "target/enrichment-test;$jsonJar" avia.FlightEnrichmentTest data/flights
+```
+
+JSON-пример сохранён в `src/test/resources/aviasales-prices-for-dates.json`.
+Для `DP|6525|SVO|OVB` локальный срез 2026-09-27 — 2026-10-03 даёт 7 физических рейсов:
+медиана задержки вылета 58 минут, среднее 121.857143, медиана прилёта 70,
+доли задержек >15/>30/>60 — 0.714286/0.714286/0.428571, доля отмен 0,
+медиана компенсации −3 минуты. Предложение сохраняет вылет `2026-10-26T22:45:00+03:00`
+и цену `4773 RUB`.
+
 ## Историческая статистика регулярного рейса
 
 `FlightHistoryAggregator.aggregate(List<FlightRecord>)` возвращает карту

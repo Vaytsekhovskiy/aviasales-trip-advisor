@@ -1,5 +1,8 @@
 *.html
+!src/main/resources/avia/delay-dashboard.html
 *.csv
 .idea
 target
 data/
+.env
+.env.*

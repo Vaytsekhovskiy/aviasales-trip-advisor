@@ -10,6 +10,14 @@ import java.time.format.DateTimeFormatter;
 
 /** RapidAPI transport. Credentials are headers, never URL parameters or log output. */
 public final class AeroDataBoxClient {
+    public static final class HttpStatusException extends IOException {
+        private final int status;
+        public HttpStatusException(int status) {
+            super("AeroDataBox HTTP " + status + "; check subscription, key, date range and quota");
+            this.status = status;
+        }
+        public int status() { return status; }
+    }
     private static final String HOST = "aerodatabox.p.rapidapi.com";
     private static final DateTimeFormatter LOCAL = DateTimeFormatter.ofPattern("yyyy-MM-dd'T'HH:mm");
     private final HttpClient http;
@@ -60,8 +68,7 @@ public final class AeroDataBoxClient {
         }
         if (response.statusCode() != 200) {
             // Do not log raw remote bodies: proxies can echo request headers containing the key.
-            throw new IOException("AeroDataBox HTTP " + response.statusCode()
-                    + "; check subscription, key, date range and quota. No automatic retry performed.");
+            throw new HttpStatusException(response.statusCode());
         }
         return response.body();
     }

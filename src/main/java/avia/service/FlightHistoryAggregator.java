@@ -8,14 +8,7 @@ import java.util.*;
  * Rows without a stable ID or a complete service key are excluded.
  */
 public final class FlightHistoryAggregator {
-    // Keep identical to DelayAnalyzer's latest-observation ordering. Never merge fields.
-    private static final Comparator<FlightRecord> OBSERVATION_ORDER = Comparator
-            .comparing(FlightRecord::collectedAtUtc, Comparator.nullsFirst(Comparator.naturalOrder()))
-            .thenComparingInt(f -> (f.departureDelayMin() != null ? 1 : 0)
-                    + (f.arrivalDelayMin() != null ? 1 : 0)
-                    + (f.scheduledDepartureLocal() != null ? 1 : 0))
-            .thenComparing(f -> "departure".equals(f.direction()) ? 1 : 0)
-            .thenComparing(FlightRecord::toString);
+    private static final Comparator<FlightRecord> OBSERVATION_ORDER = FlightObservationOrder.COMPARATOR;
 
     public Map<String, FlightHistoricalStats> aggregate(List<FlightRecord> flights) {
         Map<String, FlightRecord> latest = new TreeMap<>();
@@ -30,7 +23,7 @@ public final class FlightHistoryAggregator {
                     .ifPresent(key -> groups.computeIfAbsent(key, ignored -> new ArrayList<>()).add(flight));
         }
         Map<String, FlightHistoricalStats> result = new TreeMap<>();
-        groups.forEach((key, group) -> result.put(key, stats(key, group)));
+        groups.forEach((key, group) -> result.put(key, summarizeObservations(key, group)));
         return Collections.unmodifiableMap(result);
     }
 
@@ -47,7 +40,10 @@ public final class FlightHistoryAggregator {
         return Optional.of(String.join("|", parts));
     }
 
-    private static FlightHistoricalStats stats(String key, List<FlightRecord> flights) {
+    /** Shared metrics for an already selected group. No grouping or deduplication is performed here.
+     * The label may identify a service or a visualization group; sampleSize counts all input rows.
+     */
+    public static FlightHistoricalStats summarizeObservations(String key, List<FlightRecord> flights) {
         List<Double> departure = new ArrayList<>(), arrival = new ArrayList<>(), recovery = new ArrayList<>();
         int cancelled = 0;
         for (FlightRecord flight : flights) {
@@ -59,7 +55,7 @@ public final class FlightHistoryAggregator {
         }
         return new FlightHistoricalStats(key, flights.size(), median(departure), mean(departure),
                 median(arrival), mean(arrival), rate(departure, 15), rate(departure, 30), rate(departure, 60),
-                cancelled / (double) flights.size(), median(recovery));
+                flights.isEmpty() ? 0 : cancelled / (double) flights.size(), median(recovery));
     }
 
     private static Double median(List<Double> values) {

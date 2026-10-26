@@ -20,11 +20,7 @@ public final class DelayAnalyzer {
         if (minSamples < 1 || to.isBefore(from)) throw new IllegalArgumentException("Invalid analysis range or sample threshold");
         Map<String, FlightRecord> latest = new TreeMap<>();
         int missing = 0, duplicates = 0;
-        Comparator<FlightRecord> order = Comparator.comparing(FlightRecord::collectedAtUtc,
-                        Comparator.nullsFirst(Comparator.naturalOrder()))
-                .thenComparingInt(DelayAnalyzer::completeness)
-                .thenComparing(f -> "departure".equals(f.direction()) ? 1 : 0)
-                .thenComparing(FlightRecord::toString);
+        Comparator<FlightRecord> order = FlightObservationOrder.COMPARATOR;
         for (FlightRecord f : rows) {
             if (f.flightId() == null || f.flightId().isBlank()) { missing++; continue; }
             FlightRecord previous = latest.putIfAbsent(f.flightId(), f);
@@ -49,10 +45,6 @@ public final class DelayAnalyzer {
 
     public static String cellKey(String airport, DayOfWeek day, int hour) { return airport + "|" + day + "|" + hour; }
     private static String value(String v, String fallback) { return v == null ? fallback : v; }
-    private static int completeness(FlightRecord f) {
-        return (f.departureDelayMin() != null ? 1 : 0) + (f.arrivalDelayMin() != null ? 1 : 0)
-                + (f.scheduledDepartureLocal() != null ? 1 : 0);
-    }
     private static Map<String, Stats> group(List<FlightRecord> flights, Function<FlightRecord, String> key, int min) {
         Map<String, List<FlightRecord>> groups = new TreeMap<>();
         for (FlightRecord f : flights) groups.computeIfAbsent(key.apply(f), k -> new ArrayList<>()).add(f);
