@@ -1,0 +1,26 @@
+{
+  "departures": [
+    {
+      "number": "SU 100", "status": "Arrived", "airline": {"iata": "SU", "icao": "AFL", "name": "Test, \"Air\""},
+      "departure": {
+        "scheduledTime": {"utc": "2026-10-02 22:00Z", "local": "2026-10-03 01:00+03:00"},
+        "revisedTime": {"utc": "2026-10-02 22:40Z"},
+        "runwayTime": {"utc": "2026-10-02 22:45Z"}
+      },
+      "arrival": {
+        "airport": {"iata": "LED", "icao": "ULLI", "name": "Saint Petersburg", "timeZone": "Europe/Moscow"},
+        "scheduledTime": {"utc": "2026-10-02 23:30Z", "local": "2026-10-03 02:30+03:00"},
+        "revisedTime": {"utc": "2026-10-02 23:45Z"}
+      }
+    },
+    {"number": "SU 101", "status": "Canceled", "airline": {"iata": "SU"},
+     "departure": {"scheduledTime": {"utc": "2026-10-03 00:00Z"}, "revisedTime": {"utc": "2026-10-03 01:00Z"}},
+     "arrival": {"airport": {"iata": "AER"}}}
+  ],
+  "arrivals": [
+    {"number": "SU 200", "status": "Arrived", "airline": {"iata": "SU"},
+     "departure": {"airport": {"iata": "OVB"}},
+     "arrival": {"scheduledTime": {"utc": "2026-10-03 05:00Z", "local": "2026-10-03 08:00+03:00"},
+                 "revisedTime": {"utc": "2026-10-03 04:55Z"}}}
+  ]
+}

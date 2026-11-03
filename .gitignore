@@ -1,4 +1,9 @@
 *.html
+!src/main/resources/avia/delay-dashboard.html
+!src/main/resources/avia/offer-dashboard.html
 *.csv
 .idea
 target
+data/
+.env
+.env.*

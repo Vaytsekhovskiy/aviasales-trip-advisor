@@ -29,6 +29,23 @@ import java.util.List;
 public class Main {
 
     public static void main(String[] args) {
+        if (args.length > 0 && (args[0].equals("--delays") || args[0].equals("--delays-import")
+                || args[0].equals("--delays-health") || args[0].equals("--delays-airport")
+                || args[0].equals("--delays-reprocess") || args[0].equals("--delays-plan")
+                || args[0].equals("--delays-collect") || args[0].equals("--delays-report"))) {
+            try {
+                if (args[0].equals("--delays-plan") || args[0].equals("--delays-collect") || args[0].equals("--delays-report")) DatasetCli.run(args);
+                else DelayCli.run(args);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                System.err.println("Flight collection interrupted");
+                System.exit(1);
+            } catch (IOException | RuntimeException e) {
+                System.err.println("Flight collection failed: " + e.getMessage());
+                System.exit(1);
+            }
+            return;
+        }
         if (args.length > 0 && args[0].equalsIgnoreCase("--transfers")) {
             runTransfersMode(Arrays.copyOfRange(args, 1, args.length));
             return;

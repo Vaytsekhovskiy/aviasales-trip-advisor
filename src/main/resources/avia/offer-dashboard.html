@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Предложения и история задержек</title>
+<style>
+:root{--ink:#182c40;--muted:#607185;--line:#dce4eb;--teal:#087d80;--bg:#f3f6f9}*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 system-ui,Segoe UI,sans-serif}main{max-width:1480px;margin:auto;padding:36px 26px}header{padding:12px 0 28px;border-bottom:1px solid var(--line)}.eyebrow{color:var(--teal);font-weight:700;letter-spacing:.12em;font-size:12px}h1{font-size:clamp(26px,4vw,42px);letter-spacing:-.035em;margin:8px 0}h2{font-size:22px;margin:0 0 12px}p{margin:8px 0}.muted,small{color:var(--muted)}.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:24px 0}.card,section{background:white;border:1px solid var(--line);border-radius:14px;padding:20px}.card strong{display:block;font-size:32px;font-weight:650;letter-spacing:-.04em}.card small{display:block}section{margin:20px 0}.filters{display:flex;flex-wrap:wrap;gap:12px;align-items:end}label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}select,input,button{font:inherit;padding:9px;border:1px solid #bdcbd5;border-radius:7px;background:white;color:var(--ink)}input[type=number]{width:90px}button{cursor:pointer}button:hover{border-color:var(--teal);color:var(--teal)}button:disabled{opacity:.45;cursor:default}a:focus-visible,input:focus-visible,select:focus-visible,button:focus-visible{outline:3px solid #82cdd0;outline-offset:2px}.scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px}th{text-align:left;color:var(--muted);background:#f7f9fb;font-size:11px;letter-spacing:.02em}th,td{padding:12px 10px;border-bottom:1px solid var(--line);vertical-align:top}td{white-space:nowrap}td small{display:block}td.reason{white-space:normal;min-width:240px}tbody tr:hover{background:#f7fbfc}.badge{display:inline-block;border-radius:20px;background:#e3f2ee;color:#196d58;padding:3px 9px;font-size:11px}.badge.missing{background:#fff1d7;color:#80550e}.badge.invalid{background:#f8e6e5;color:#923f38}.pager{display:flex;gap:12px;align-items:center;justify-content:flex-end;margin-top:16px}.note{padding:12px 16px;background:#edf6f7;border-left:3px solid var(--teal);border-radius:4px}.chartwrap{max-width:950px;margin:auto}svg{width:100%;height:auto;display:block}svg text{font:12px system-ui;fill:var(--muted)}svg circle{fill:var(--teal);opacity:.5}svg circle:focus,svg circle:hover{opacity:1;stroke:#18374d;stroke-width:2}.empty{padding:24px;text-align:center;color:var(--muted)}summary{cursor:pointer}footer{font-size:12px;color:var(--muted);padding:12px 0 30px}.source{overflow-wrap:anywhere;white-space:normal;max-width:350px}.rowtitle{display:flex;justify-content:space-between;gap:12px;align-items:center;flex-wrap:wrap}@media(max-width:700px){main{padding:20px 12px}.cards{grid-template-columns:repeat(2,1fr)}section{padding:14px}.filters label{flex:1;min-width:130px}h1{font-size:29px}}
+</style></head><body><main>
+<header><div class="eyebrow">AVIASALES × AERODATABOX · ЛОКАЛЬНЫЙ ОТЧЁТ</div><h1>Цена билета и история рейса</h1><p class="muted">Предложения Aviasales, дополненные историческими задержками по точному ключу регулярного рейса.</p><p id="generated" class="muted"></p></header>
+<noscript>Включите JavaScript для просмотра встроенных данных. Интернет и Java backend после генерации не нужны.</noscript>
+<div id="kpis" class="cards"></div>
+<p class="note">Цена — сохранённое наблюдение, не гарантия доступности билета сейчас. История задержек описывает прошлые рейсы, а не прогноз конкретного вылета. Отсутствие истории не означает нулевую задержку.</p>
+<section><h2>Выбор предложений</h2><div class="filters">
+<label>Маршрут<select id="route"><option value="">Все маршруты</option></select></label>
+<label>Авиакомпания<select id="airline"><option value="">Все авиакомпании</option></select></label>
+<label>История<select id="status"><option value="">Все корректные</option><option value="MATCHED">Есть история</option><option value="NOT_MATCHED">Нет истории</option></select></label>
+<label>Вылет с<input id="from" type="date"></label><label>Вылет по<input id="to" type="date"></label>
+<label>Валюта<select id="currency"><option value="">Все валюты</option></select></label>
+<label>Мин. N истории<input id="minN" type="number" min="0" step="1" value="0"></label>
+<label>Сортировка<select id="sort"><option value="date">Дата вылета ↑</option><option value="price">Валюта, затем цена ↑</option><option value="median">Медианная задержка ↑</option><option value="sample">Размер истории ↓</option></select></label>
+<button id="reset" type="button">Сбросить</button></div><p class="muted">Фильтры работают локально. N &gt; 0 скрывает предложения без истории. Разные ценовые снимки одного вылета остаются отдельными строками.</p></section>
+<section><div class="rowtitle"><h2>Предложения</h2><span id="count" role="status" aria-live="polite"></span></div><p id="period" class="muted"></p>
+<div class="scroll"><table><thead><tr><th>Рейс / маршрут</th><th>Вылет · местное время</th><th>Цена / снимок UTC</th><th>История</th><th>N рейсов</th><th>Медиана вылета, мин</th><th>Медиана прилёта, мин</th><th>Доля задержек &gt;30 мин</th><th>Доля отмен</th><th>Подробности</th></tr></thead><tbody id="offers"></tbody></table></div>
+<div class="pager"><button id="prev" type="button">← Назад</button><span id="page"></span><button id="next" type="button">Далее →</button></div>
+<p class="muted">N — все физические рейсы в исторической группе, включая отменённые. Задержки и их доли рассчитаны только по неотменённым рейсам с доступной метрикой; их знаменатель может быть меньше N. «—» означает отсутствие значения.</p></section>
+<section><div class="rowtitle"><h2>Цена и историческая задержка</h2><label>Валюта графика<select id="chartCurrency"></select></label></div>
+<p class="muted">Одна точка — один выбранный ценовой снимок с известной медианой вылета. X: цена; Y: историческая медиана задержки, минуты. Наведите на точку или выберите её клавишей Tab для подробностей.</p>
+<p id="chartInfo" class="muted"></p><div id="chart" class="chartwrap"></div><p class="muted">Валюты не смешиваются. Выбросы не скрываются; совпадающие точки могут перекрываться. График не доказывает связь цены с надёжностью рейса.</p></section>
+<section><details><summary id="invalidTitle">Неполные записи</summary><p class="muted">Эти записи не участвуют в сравнении цен. Они не удалены: исправление требует достоверных исходных данных, а не подстановки валюты.</p><div class="scroll"><table><thead><tr><th>Источник</th><th>Снимок UTC</th><th>Причина</th></tr></thead><tbody id="invalid"></tbody></table></div></details></section>
+<footer>Источник: avia.enriched_flight_offers. Метрики перенесены без пересчёта. Ключ: airline | flightNumber | originAirport | destinationAirport; дата и цена в сопоставлении не участвуют. Отчёт содержит сохранённые данные и не обновляется автоматически. Неполные записи и верхние KPI относятся ко всему отчёту, таблица и график — к выбранным фильтрам.</footer>
+</main><script id="offer-data" type="application/json">__OFFER_DATA__</script><script>
+'use strict';
+const D=JSON.parse(document.getElementById('offer-data').textContent);
+const $=id=>document.getElementById(id), all=D.rows.filter(r=>r.status!=='INVALID_OFFER'), invalid=D.rows.filter(r=>r.status==='INVALID_OFFER');
+const fmt=n=>n==null?'—':Number(n).toLocaleString('ru-RU',{maximumFractionDigits:2}), pct=n=>n==null?'—':fmt(n*100)+'%';
+const utc=s=>s?s.replace('T',' ').replace(/\.\d+Z$/,'Z'):'Неизвестно';
+function el(tag,text,attrs={}){const e=document.createElement(tag);if(text!=null)e.textContent=text;for(const [k,v] of Object.entries(attrs))e.setAttribute(k,v);return e;}
+const route=r=>`${r.origin} → ${r.destination}`;
+function options(id,values){for(const value of [...new Set(values)].sort())$(id).append(el('option',value,{value}));}
+options('route',all.map(route));options('airline',all.map(r=>r.airline));options('currency',all.map(r=>r.currency));options('chartCurrency',all.map(r=>r.currency));
+if(all.length)$('chartCurrency').value=all[0].currency;
+$('generated').textContent=`Сформирован: ${utc(D.generatedAt)} · время формирования UTC`;
+const matched=all.filter(r=>r.status==='MATCHED').length;
+for(const [name,value,note] of [['Ценовых снимков',D.rows.length,'Вся коллекция, включая неполные'],['С историей',matched,D.rows.length?`Покрытие всех снимков: ${pct(matched/D.rows.length)}`:'Нет данных'],['Без истории',all.length-matched,'Корректные предложения без совпадения'],['Неполных записей',invalid.length,'Причины перечислены ниже']]){
+ const card=el('div',null,{class:'card'});card.append(el('span',name),el('strong',fmt(value)),el('small',note));$('kpis').append(card);
+}
+$('invalidTitle').textContent=`Неполные записи · ${invalid.length}`;
+for(const r of invalid){const tr=el('tr');tr.append(el('td',r.id,{class:'source'}),el('td',utc(r.collectedAt)),el('td',r.error||'Не указана',{class:'reason'}));$('invalid').append(tr);}
+if(!invalid.length){const tr=el('tr');tr.append(el('td','Неполных записей нет',{colspan:3}));$('invalid').append(tr);}
+let page=0;const pageSize=50;
+function filtered(){
+ const min=Math.max(0,Number($('minN').value)||0);
+ return all.filter(r=>(!$('route').value||route(r)===$('route').value)&&(!$('airline').value||r.airline===$('airline').value)
+ &&(!$('status').value||r.status===$('status').value)&&(!$('currency').value||r.currency===$('currency').value)
+ &&(!$('from').value||r.departureAt.slice(0,10)>=$('from').value)&&(!$('to').value||r.departureAt.slice(0,10)<=$('to').value)
+ &&(min===0||(r.history!=null&&r.history.n>=min)));
+}
+function compareNullable(a,b){return a==null?(b==null?0:1):b==null?-1:a-b;}
+function sorted(rows){return [...rows].sort((a,b)=>{
+ let order=0;
+ switch($('sort').value){case 'price':order=a.currency.localeCompare(b.currency)||a.price-b.price;break;
+ case 'median':order=compareNullable(a.history?.median,b.history?.median);break;
+ case 'sample':order=compareNullable(a.history?-a.history.n:null,b.history?-b.history.n:null);break;
+ default:order=a.departureAt.slice(0,16).localeCompare(b.departureAt.slice(0,16));}
+ return order||a.key.localeCompare(b.key)||String(a.id).localeCompare(String(b.id));
+ });}
+function drawTable(rows){
+ $('offers').replaceChildren();const pages=Math.max(1,Math.ceil(rows.length/pageSize));page=Math.min(page,pages-1);
+ for(const r of rows.slice(page*pageSize,(page+1)*pageSize)){
+  const tr=el('tr'),flight=el('td',`${r.airline} ${r.number}`);flight.append(el('small',route(r)));
+  const departure=el('td',r.departureAt.replace('T',' '));departure.append(el('small','Местное время и смещение UTC'));
+  const price=el('td',`${fmt(r.price)} ${r.currency}`);price.append(el('small',utc(r.collectedAt)));
+  const status=el('td');status.append(el('span',r.history?'Есть история':'Нет исторических данных',{class:r.history?'badge':'badge missing'}));
+  tr.append(flight,departure,price,status,el('td',fmt(r.history?.n)),el('td',fmt(r.history?.median)),el('td',fmt(r.history?.arrivalMedian)),el('td',pct(r.history?.p30)),el('td',pct(r.history?.cancellation)));
+  const td=el('td'),details=el('details');details.append(el('summary','Метрики и источник'));
+  const lines=[`Ключ: ${r.key}`,`Пересадок: ${r.transfers}; длительность: ${r.duration} мин`,`Обогащено UTC: ${utc(r.enrichedAt)}`,`Источник: ${r.id}`];
+  if(r.history){const h=r.history;lines.unshift(`Среднее вылета: ${fmt(h.mean)} мин; прилёта: ${fmt(h.arrivalMean)} мин`,`Доля >15: ${pct(h.p15)}; >30: ${pct(h.p30)}; >60: ${pct(h.p60)}`,`Медиана компенсации: ${fmt(h.recovery)} мин (вылет − прилёт)`);}
+  lines.forEach(s=>details.append(el('p',s,{class:'source'})));td.append(details);tr.append(td);$('offers').append(tr);
+ }
+ if(!rows.length){const tr=el('tr');tr.append(el('td','Нет предложений для выбранных фильтров',{colspan:10,class:'empty'}));$('offers').append(tr);}
+ $('page').textContent=`${page+1} / ${pages}`;$('prev').disabled=page===0;$('next').disabled=page===pages-1;
+}
+function svg(tag,attrs={},text){const e=document.createElementNS('http://www.w3.org/2000/svg',tag);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);if(text!=null)e.textContent=text;return e;}
+function scatter(rows){
+ $('chart').replaceChildren();const currency=$('chartCurrency').value;
+ const points=rows.filter(r=>r.currency===currency&&r.history?.median!=null);
+ $('chartInfo').textContent=`Показано ${points.length} из ${rows.length} выбранных снимков · ${currency||'нет валюты'} · только известные медианы`;
+ if(!points.length){$('chart').append(el('p','Нет данных для графика',{class:'empty'}));return;}
+ const w=900,h=370,left=70,right=30,top=20,bottom=55;
+ const prices=points.map(r=>r.price),medians=points.map(r=>r.history.median);
+ const xmax=Math.max(1,...prices)*1.05,ymin=Math.min(0,...medians),ymax=Math.max(1,...medians);
+ const x=v=>left+v/xmax*(w-left-right),y=v=>h-bottom-(v-ymin)/(ymax-ymin)*(h-top-bottom);
+ const chart=svg('svg',{viewBox:`0 0 ${w} ${h}`,role:'img','aria-label':`Цена в ${currency} и историческая медиана задержки вылета`});
+ for(let i=0;i<=4;i++){const xv=xmax*i/4,yv=ymin+(ymax-ymin)*i/4;
+ chart.append(svg('line',{x1:left,x2:w-right,y1:y(yv),y2:y(yv),stroke:'#dce4eb'}),svg('text',{x:left-8,y:y(yv)+4,'text-anchor':'end'},fmt(yv)),svg('text',{x:x(xv),y:h-bottom+20,'text-anchor':'middle'},fmt(xv)));}
+ chart.append(svg('text',{x:w/2,y:h-5,'text-anchor':'middle'},`Цена, ${currency}`),svg('text',{x:8,y:12},'Минуты'));
+ for(const r of points){const description=`${r.airline} ${r.number} · ${route(r)} · ${r.departureAt}\n${fmt(r.price)} ${r.currency}; медиана ${fmt(r.history.median)} мин; N=${r.history.n}\nСнимок UTC: ${utc(r.collectedAt)}`;
+ const point=svg('circle',{cx:x(r.price),cy:y(r.history.median),r:5,tabindex:0,'aria-label':description});point.append(svg('title',{},description));chart.append(point);}
+ $('chart').append(chart);
+}
+function render(){const rows=sorted(filtered());$('count').textContent=`Выбрано ${rows.length} из ${all.length} корректных снимков`;
+ const dates=rows.map(r=>r.departureAt.slice(0,10)).sort();$('period').textContent=dates.length?`Даты вылета: ${dates[0]} — ${dates[dates.length-1]} · время вылета в исходном часовом поясе`:'Период не определён';drawTable(rows);scatter(rows);}
+for(const id of ['route','airline','status','from','to','currency','minN','sort'])$(id).addEventListener('change',()=>{page=0;render();});
+$('chartCurrency').addEventListener('change',render);$('prev').addEventListener('click',()=>{page--;render();});$('next').addEventListener('click',()=>{page++;render();});
+$('reset').addEventListener('click',()=>{for(const id of ['route','airline','status','from','to','currency'])$(id).value='';$('minN').value='0';$('sort').value='date';page=0;render();});
+render();
+</script></body></html>
