@@ -22,10 +22,10 @@ public class TransferChartsRenderer {
     private static final String[] NAMES = {"Прямой", "1 пересадка", "2+ пересадки"};
     private static final int TOP_DESTINATIONS = 10;
 
-    private static final int LEFT = 76;
-    private static final int RIGHT = 12;
-    private static final int TOP = 24;
-    private static final int BOTTOM = 44;
+    static final int LEFT = 76;
+    static final int RIGHT = 12;
+    static final int TOP = 24;
+    static final int BOTTOM = 44;
 
     public static void render(Path outputFile, String origin, String currency, PairedTransferStats stats,
                               int[] ticketsByBucket, String period) throws IOException {
@@ -210,7 +210,7 @@ public class TransferChartsRenderer {
     // ---------- общие мелочи для рисования ----------
 
     /** Вертикальная шкала с «красивыми» делениями; всегда включает ноль. */
-    private static class Axis {
+    static class Axis {
         final double lo;
         final double hi;
         final double step;
@@ -236,7 +236,7 @@ public class TransferChartsRenderer {
         }
     }
 
-    private static void drawAxis(StringBuilder svg, Axis axis, int left, int plotW, boolean percent) {
+    static void drawAxis(StringBuilder svg, Axis axis, int left, int plotW, boolean percent) {
         for (double t = axis.lo; t <= axis.hi + axis.step / 1000; t += axis.step) {
             double y = axis.y(t);
             boolean zero = Math.abs(t) < axis.step / 1000;
@@ -247,25 +247,25 @@ public class TransferChartsRenderer {
         }
     }
 
-    private static StringBuilder svgStart(int w, int h, String ariaLabel) {
+    static StringBuilder svgStart(int w, int h, String ariaLabel) {
         return new StringBuilder("<svg viewBox='0 0 " + w + " " + h + "' width='100%' role='img' aria-label='"
                 + esc(ariaLabel) + "'>");
     }
 
-    private static String text(double x, double y, String s, String anchor, String color, int size, String extra) {
+    static String text(double x, double y, String s, String anchor, String color, int size, String extra) {
         return "<text x='" + f1(x) + "' y='" + f1(y) + "' text-anchor='" + anchor + "' fill='" + color
                 + "' font-size='" + size + "' " + extra + ">" + esc(s) + "</text>";
     }
 
-    private static String f1(double v) {
+    static String f1(double v) {
         return String.format(Locale.ROOT, "%.1f", v);
     }
 
-    private static String fmt(int v) {
+    static String fmt(int v) {
         return String.format(Locale.ROOT, "%,d", v).replace(',', '\u00A0');
     }
 
-    private static String esc(String s) {
+    static String esc(String s) {
         return s.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;").replace("'", "&#39;");
     }
 }

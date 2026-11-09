@@ -110,11 +110,71 @@ public class MongoSource implements AutoCloseable {
         return new TransferData(byDestination, tickets);
     }
 
-    /** Сколько срезов и за какой период есть у источника — для вывода в консоль. */
+    /** Города вылета, по которым есть билеты prices_for_dates (для режима «все города»). */
+    public List<String> loadOrigins() {
+        List<String> origins = new ArrayList<>();
+        clean.distinct("origin", Filters.eq("source", "prices_for_dates"), String.class).into(origins);
+        Collections.sort(origins);
+        return origins;
+    }
+
+    /**
+     * Задача 4: цены авиакомпаний по группам «направление + дата вылета (+ срез)».
+     * В группе — самая дешёвая цена каждой авиакомпании; группы, где только одна авиакомпания,
+     * отбрасываются: сравнивать не с кем.
+     *
+     * directOnly = true: только прямые рейсы (сравнение чище: пересадки меняют цену).
+     * perSnapshot = true: сравниваем цены одного среза (тогда известно, за сколько дней до вылета
+     * они сняты); false — самая дешёвая цена на дату за все срезы (горизонт бронирования неизвестен).
+     */
+    public List<AirlineStats.Group> loadAirlineGroups(String origin, boolean directOnly, boolean perSnapshot) {
+        class Acc {
+            String destination;
+            int daysBefore;
+            final Map<String, Integer> prices = new HashMap<>();
+        }
+        Map<String, Acc> groups = new HashMap<>(); // направление|дата[|срез] -> накопитель
+        Bson filter = directOnly
+                ? Filters.and(Filters.eq("source", "prices_for_dates"), Filters.eq("origin", origin),
+                Filters.eq("transfers", 0))
+                : Filters.and(Filters.eq("source", "prices_for_dates"), Filters.eq("origin", origin));
+
+        for (Document d : clean.find(filter).projection(Projections.include(
+                "destination", "airline", "price", "depart_date", "collected_at", "days_before"))) {
+            String airline = d.getString("airline");
+            Integer price = d.getInteger("price");
+            Date collectedAt = d.getDate("collected_at");
+            if (airline == null || price == null || collectedAt == null) {
+                continue;
+            }
+            String destination = d.getString("destination");
+            Integer daysBefore = d.getInteger("days_before");
+            String key = destination + "|" + d.getString("depart_date") + (perSnapshot ? "|" + collectedAt.getTime() : "");
+            Acc g = groups.computeIfAbsent(key, k -> {
+                Acc created = new Acc();
+                created.destination = destination;
+                created.daysBefore = perSnapshot && daysBefore != null ? daysBefore : -1;
+                return created;
+            });
+            g.prices.merge(airline, price, Math::min);
+        }
+
+        List<AirlineStats.Group> result = new ArrayList<>();
+        for (Acc g : groups.values()) {
+            if (g.prices.size() >= 2) {
+                result.add(new AirlineStats.Group(g.destination, g.daysBefore, g.prices));
+            }
+        }
+        return result;
+    }
+
+    /** Сколько срезов и за какой период есть у источника (origin = null — по всем городам). */
     public String describe(String source, String origin) {
         List<Date> dates = new ArrayList<>();
-        clean.distinct("collected_at", Filters.and(Filters.eq("source", source), Filters.eq("origin", origin)),
-                Date.class).into(dates);
+        Bson filter = origin == null
+                ? Filters.eq("source", source)
+                : Filters.and(Filters.eq("source", source), Filters.eq("origin", origin));
+        clean.distinct("collected_at", filter, Date.class).into(dates);
         if (dates.isEmpty()) {
             return "данных нет (источник " + source + ")";
         }
