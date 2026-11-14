@@ -1,4 +1,16 @@
 *.html
+!src/main/resources/avia/delay-dashboard.html
+!src/main/resources/avia/offer-dashboard.html
 *.csv
 .idea
 target
+data/
+.env
+.env.*
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.pytest_tmp/
+pytest-cache-files-*/
+calendar-response.json
+offer-response.json
