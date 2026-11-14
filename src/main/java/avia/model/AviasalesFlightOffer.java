@@ -9,20 +9,9 @@ public record AviasalesFlightOffer(String airlineIata, String flightNumber,
         String originAirport, String destinationAirport, OffsetDateTime departureAt,
         long price, String currency, int transfers, int durationMin) {
     public AviasalesFlightOffer {
-        airlineIata = compact(airlineIata);
-        originAirport = compact(originAirport);
-        destinationAirport = compact(destinationAirport);
-        flightNumber = compact(flightNumber);
-        if (!airlineIata.matches("[A-Z0-9]{2}") || !originAirport.matches("[A-Z]{3}")
-                || !destinationAirport.matches("[A-Z]{3}")) {
-            throw new IllegalArgumentException("Invalid IATA code");
-        }
-        // Strip an airline prefix only when the remaining part is itself a flight number.
-        if (flightNumber.startsWith(airlineIata)
-                && flightNumber.substring(airlineIata.length()).matches("[0-9]+[A-Z]?")) {
-            flightNumber = flightNumber.substring(airlineIata.length());
-        }
-        if (!flightNumber.matches("[0-9]+[A-Z]?")) throw new IllegalArgumentException("Invalid flight number");
+        var identity = new FlightServiceIdentity(airlineIata, flightNumber, originAirport, destinationAirport);
+        airlineIata = identity.airline(); flightNumber = identity.number();
+        originAirport = identity.origin(); destinationAirport = identity.destination();
         currency = compact(currency);
         if (!currency.matches("[A-Z]{3}")) throw new IllegalArgumentException("Invalid currency");
         Objects.requireNonNull(departureAt, "departureAt");
@@ -38,3 +27,4 @@ public record AviasalesFlightOffer(String airlineIata, String flightNumber,
         return value.replaceAll("(?U)\\s+", "").toUpperCase(Locale.ROOT);
     }
 }
+
