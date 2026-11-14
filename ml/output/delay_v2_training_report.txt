@@ -1,0 +1,83 @@
+Departure delay model v2 training report
+
+DATASET AUDIT
+Total documents: 112703
+Unique flightId: 112703
+Duplicate flightId documents: 0
+Scheduled departure range: 2026-08-30T23:25:00+00:00 .. 2026-11-13T20:50:00+00:00
+Documents at/after 2026-11-14T00:00:00Z: 0
+Rows after ML filtering: 98979
+
+DAILY DOCUMENT COUNTS (UTC)
+2026-10-24: 1532
+2026-10-25: 1466
+2026-10-26: 1367
+2026-10-27: 1298
+2026-10-28: 1372
+2026-10-29: 1330
+2026-10-30: 1489
+2026-10-31: 1363
+2026-11-01: 1453
+2026-11-02: 1371
+2026-11-03: 1272
+2026-11-04: 1342
+2026-11-05: 1314
+2026-11-06: 1433
+2026-11-07: 1311
+2026-11-08: 1399
+2026-11-09: 1329
+2026-11-10: 1200
+2026-11-11: 1294
+2026-11-12: 1296
+2026-11-13: 1134
+
+CHRONOLOGICAL SPLIT
+TRAIN: 2026-08-31T03:00:00+00:00 .. 2026-10-31T23:55:00+00:00, N=83805
+VALIDATION: 2026-11-01T00:05:00+00:00 .. 2026-11-06T23:55:00+00:00, N=7234
+TEST: 2026-11-07T00:05:00+00:00 .. 2026-11-13T20:50:00+00:00, N=7940
+
+INTERNAL TEST
+Baseline: MAE=52.69, MSE=18544.85 min^2, RMSE=136.18, MedianAE=8.50
+delay-v2: MAE=33.60, MSE=10310.08 min^2, RMSE=101.54, MedianAE=7.17
+Improvement vs baseline MAE: 36.23%
+Evaluation best iteration: 40
+
+HEAVY-TAIL TEST BREAKDOWN
+targetLe60: N=6746, baseline MAE/MSE/RMSE=30.15/7717.57/87.85, v2 MAE/MSE/RMSE=11.30/411.31/20.28, improvement=62.51%
+targetLe180: N=7533, baseline MAE/MSE/RMSE=37.85/9845.95/99.23, v2 MAE/MSE/RMSE=17.06/1011.55/31.80, improvement=54.92%
+targetLe360: N=7796, baseline MAE/MSE/RMSE=43.24/11200.65/105.83, v2 MAE/MSE/RMSE=23.33/2514.72/50.15, improvement=46.04%
+targetGt360: N=144, baseline MAE/MSE/RMSE=564.36/416151.72/645.10, v2 MAE/MSE/RMSE=589.72/432342.32/657.53, improvement=-4.49%
+
+EXTERNAL OUT-OF-TIME CHECK: 2026-11-14
+DP202: v1=163.53, v2=100.03, actual=257.00, v1 error=93.47, v2 error=156.97
+DP511: v1=164.51, v2=127.02, actual=20.00, v1 error=144.51, v2 error=107.02
+DP529: v1=87.93, v2=60.83, actual=61.00, v1 error=26.93, v2 error=0.17
+N=3 v1: MAE=88.30, MSE=10115.01 min^2, RMSE=100.57, MedianAE=93.47
+N=3 v2: MAE=88.05, MSE=12030.74 min^2, RMSE=109.68, MedianAE=107.02
+N=3 is too small for a statistically strong conclusion; this is a freshness sanity check only.
+
+HISTORICAL CONTEXT COMPARISON
+DP202
+  v1: profile N/median=0/96.00; service N/median=1/96.00; route N/median=939/0.00; airline N/median=7136/100.00
+  v2: profile N/median=1/0.00; service N/median=15/96.00; route N/median=1273/0.00; airline N/median=9330/95.00
+DP511
+  v1: profile N/median=4/202.50; service N/median=13/123.00; route N/median=13/123.00; airline N/median=7136/100.00
+  v2: profile N/median=6/171.50; service N/median=18/125.00; route N/median=18/125.00; airline N/median=9330/95.00
+DP529
+  v1: profile N/median=0/44.00; service N/median=54/44.00; route N/median=729/2.00; airline N/median=7136/100.00
+  v2: profile N/median=2/6.50; service N/median=74/35.50; route N/median=934/1.00; airline N/median=9330/95.00
+
+DEPLOYMENT
+Default model version: delay-v2
+Artifacts: models/delay_model_v1.cbm, models/delay_model_v1_metadata.json,
+           models/delay_model_v2.cbm, models/delay_model_v2_metadata.json
+
+SAFETY / METHODOLOGY
+- Temporal cutoff is exclusive: 2026-11-14T00:00:00Z.
+- 14 November observations were not used for training or model selection.
+- Target remains max(0, departureDelayMin), sourced from revised departure.
+- Extreme delays were not removed or capped.
+- Historical features use strictly earlier scheduled departures.
+- CatBoost parameters and feature methodology were not changed.
+- No hyperparameter search was performed.
+- MongoDB was read only; price logic was not changed.

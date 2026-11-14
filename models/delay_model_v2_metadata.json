@@ -1,0 +1,155 @@
+{
+  "modelVersion": "delay-v2",
+  "createdAtUtc": "2026-11-14T17:07:48.602223+00:00",
+  "targetDefinition": "max(0, departureDelayMin)",
+  "targetSource": "revisedDepartureUtc - scheduledDepartureUtc",
+  "targetClampMin": 0,
+  "features": [
+    "airlineIata",
+    "flightNumber",
+    "originIata",
+    "destinationIata",
+    "departureWeekday",
+    "routeKey",
+    "serviceKey",
+    "departureHour",
+    "isWeekend",
+    "historicalProfileMedianDelay",
+    "historicalProfileSampleSize",
+    "historicalServiceMedianDelay",
+    "historicalServiceSampleSize",
+    "historicalRouteMedianDelay",
+    "historicalRouteSampleSize",
+    "historicalAirlineMedianDelay",
+    "historicalAirlineSampleSize",
+    "historicalProfileDelayOver30Rate"
+  ],
+  "categoricalFeatures": [
+    "airlineIata",
+    "flightNumber",
+    "originIata",
+    "destinationIata",
+    "departureWeekday",
+    "routeKey",
+    "serviceKey"
+  ],
+  "selectedCatBoostParameters": {
+    "iterations": 600,
+    "depth": 6,
+    "learning_rate": 0.05,
+    "l2_leaf_reg": 5,
+    "loss_function": "MAE",
+    "eval_metric": "MAE",
+    "random_seed": 42,
+    "task_type": "CPU",
+    "verbose": false,
+    "allow_writing_files": false
+  },
+  "historicalFeatureSemantics": "strictly past flights only",
+  "temporalCutoffExclusive": "2026-11-14T00:00:00+00:00",
+  "evaluationSplit": {
+    "train": {
+      "from": "2026-08-31T03:00:00+00:00",
+      "to": "2026-10-31T23:55:00+00:00",
+      "count": 83805
+    },
+    "validation": {
+      "from": "2026-11-01T00:05:00+00:00",
+      "to": "2026-11-06T23:55:00+00:00",
+      "count": 7234
+    },
+    "test": {
+      "from": "2026-11-07T00:05:00+00:00",
+      "to": "2026-11-13T20:50:00+00:00",
+      "count": 7940
+    }
+  },
+  "evaluationMetrics": {
+    "count": 7940,
+    "baseline": {
+      "mae": 52.690365239294714,
+      "rmse": 136.17946594785806,
+      "medianAbsoluteError": 8.5,
+      "mse": 18544.846945843834
+    },
+    "model": {
+      "mae": 33.603230942144314,
+      "rmse": 101.53857429076908,
+      "medianAbsoluteError": 7.1722879360956995,
+      "mse": 10310.082069002032
+    },
+    "improvementVsBaselinePct": 36.225093924602085
+  },
+  "evaluationHeavyTail": {
+    "targetLe60": {
+      "count": 6746,
+      "baseline": {
+        "mae": 30.154313667358434,
+        "rmse": 87.84967822944093,
+        "medianAbsoluteError": 6.0,
+        "mse": 7717.565965016307
+      },
+      "model": {
+        "mae": 11.303415593967443,
+        "rmse": 20.280680204968718,
+        "medianAbsoluteError": 5.131009828016294,
+        "mse": 411.30598957621
+      },
+      "improvementVsBaselinePct": 62.51476416058107
+    },
+    "targetLe180": {
+      "count": 7533,
+      "baseline": {
+        "mae": 37.84594451081906,
+        "rmse": 99.226781507444,
+        "medianAbsoluteError": 7.5,
+        "mse": 9845.95416832603
+      },
+      "model": {
+        "mae": 17.060254645743626,
+        "rmse": 31.804885976463652,
+        "medianAbsoluteError": 6.545036768094266,
+        "mse": 1011.5507719758542
+      },
+      "improvementVsBaselinePct": 54.92184204607023
+    },
+    "targetLe360": {
+      "count": 7796,
+      "baseline": {
+        "mae": 43.2392893791688,
+        "rmse": 105.83310539130737,
+        "medianAbsoluteError": 8.0,
+        "mse": 11200.646196767573
+      },
+      "model": {
+        "mae": 23.33121587096763,
+        "rmse": 50.14698407698179,
+        "medianAbsoluteError": 7.0105782793548315,
+        "mse": 2514.720012017065
+      },
+      "improvementVsBaselinePct": 46.04162971695875
+    },
+    "targetGt360": {
+      "count": 144,
+      "baseline": {
+        "mae": 564.3611111111111,
+        "rmse": 645.0982214188609,
+        "medianAbsoluteError": 503.75,
+        "mse": 416151.71527777775
+      },
+      "model": {
+        "mae": 589.7187135455706,
+        "rmse": 657.5274308504333,
+        "medianAbsoluteError": 504.3975744999584,
+        "mse": 432342.3223207714
+      },
+      "improvementVsBaselinePct": -4.493151979330329
+    }
+  },
+  "deploymentTrainingRange": {
+    "from": "2026-08-31T03:00:00+00:00",
+    "to": "2026-11-13T20:50:00+00:00",
+    "count": 98979
+  },
+  "deploymentTrainingCount": 98979
+}
