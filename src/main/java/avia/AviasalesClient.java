@@ -26,11 +26,42 @@ public class AviasalesClient {
 
     private static final String BASE_URL = "https://api.travelpayouts.com/v1/prices/calendar";
 
-    private final HttpClient http = HttpClient.newHttpClient();
+    private final HttpClient http;
     private final String token;
+    private final URI pricesBase;
+
+    public static final class HttpStatusException extends IOException {
+        private final int status;
+        public HttpStatusException(int status) { super("Aviasales HTTP " + status); this.status = status; }
+        public int status() { return status; }
+    }
+
+    /** Raw prices_for_dates response; caller owns retries and snapshot persistence. */
+    public String fetchPricesForDates(String origin, String destination, java.time.YearMonth month)
+            throws IOException, InterruptedException {
+        if (token == null || token.isBlank()) throw new IllegalArgumentException("AVIASALES_TOKEN is required");
+        String url = pricesBase.resolve("/aviasales/v3/prices_for_dates").toString()
+                + "?origin=" + enc(origin) + "&destination=" + enc(destination) + "&departure_at=" + month
+                + "&one_way=true&direct=true&unique=false&sorting=price&currency=rub&market=ru&limit=1000&page=1"
+                + "&token=" + enc(token);
+        HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                .version(HttpClient.Version.HTTP_1_1)
+                .timeout(java.time.Duration.ofSeconds(45)).GET().build();
+        HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        if (response.statusCode() != 200) throw new HttpStatusException(response.statusCode());
+        return decodeBody(response);
+    }
 
     public AviasalesClient(String token) {
+        this(token, URI.create("https://api.travelpayouts.com"),
+                HttpClient.newBuilder().connectTimeout(java.time.Duration.ofSeconds(15)).build());
+    }
+
+    /** Injectable transport/base for offline prices_for_dates integration checks. */
+    public AviasalesClient(String token, URI pricesBase, HttpClient http) {
         this.token = token;
+        this.pricesBase = pricesBase;
+        this.http = http;
     }
 
     public List<PriceEntry> fetchYearCalendar(String origin, String destination, String currency)
