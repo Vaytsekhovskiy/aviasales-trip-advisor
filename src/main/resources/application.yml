@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: aviasales-trip-advisor
+
+avia:
+  mongo:
+    uri: ${MONGO_URI:mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000}
+    database: avia
+  api:
+    aviasales:
+      token: ${AVIASALES_TOKEN:}
+    aerodatabox:
+      key: ${AERODATABOX_API_KEY:}
