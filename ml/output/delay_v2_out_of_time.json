@@ -1,0 +1,112 @@
+{
+  "warning": "N=3 is only a freshness sanity check, not statistically conclusive.",
+  "v1ModelVersion": "delay-v1",
+  "v2ModelVersion": "delay-v2",
+  "v1HistoryCutoffInclusive": "2026-10-24T20:50:00+00:00",
+  "flights": [
+    {
+      "flight": "DP202",
+      "v1Prediction": 163.52709454706368,
+      "v2Prediction": 100.02919707292993,
+      "observedActual": 257.0,
+      "v1AbsoluteError": 93.47290545293632,
+      "v2AbsoluteError": 156.97080292707005,
+      "v1HistoricalContext": {
+        "historicalProfileMedianDelay": 96.0,
+        "historicalProfileSampleSize": 0,
+        "historicalServiceMedianDelay": 96.0,
+        "historicalServiceSampleSize": 1,
+        "historicalRouteMedianDelay": 0.0,
+        "historicalRouteSampleSize": 939,
+        "historicalAirlineMedianDelay": 100.0,
+        "historicalAirlineSampleSize": 7136,
+        "historicalProfileDelayOver30Rate": 1.0
+      },
+      "v2HistoricalContext": {
+        "historicalProfileMedianDelay": 0.0,
+        "historicalProfileSampleSize": 1,
+        "historicalServiceMedianDelay": 96.0,
+        "historicalServiceSampleSize": 15,
+        "historicalRouteMedianDelay": 0.0,
+        "historicalRouteSampleSize": 1273,
+        "historicalAirlineMedianDelay": 95.0,
+        "historicalAirlineSampleSize": 9330,
+        "historicalProfileDelayOver30Rate": 0.0
+      }
+    },
+    {
+      "flight": "DP511",
+      "v1Prediction": 164.50838354181366,
+      "v2Prediction": 127.01567820267059,
+      "observedActual": 20.0,
+      "v1AbsoluteError": 144.50838354181366,
+      "v2AbsoluteError": 107.01567820267059,
+      "v1HistoricalContext": {
+        "historicalProfileMedianDelay": 202.5,
+        "historicalProfileSampleSize": 4,
+        "historicalServiceMedianDelay": 123.0,
+        "historicalServiceSampleSize": 13,
+        "historicalRouteMedianDelay": 123.0,
+        "historicalRouteSampleSize": 13,
+        "historicalAirlineMedianDelay": 100.0,
+        "historicalAirlineSampleSize": 7136,
+        "historicalProfileDelayOver30Rate": 1.0
+      },
+      "v2HistoricalContext": {
+        "historicalProfileMedianDelay": 171.5,
+        "historicalProfileSampleSize": 6,
+        "historicalServiceMedianDelay": 125.0,
+        "historicalServiceSampleSize": 18,
+        "historicalRouteMedianDelay": 125.0,
+        "historicalRouteSampleSize": 18,
+        "historicalAirlineMedianDelay": 95.0,
+        "historicalAirlineSampleSize": 9330,
+        "historicalProfileDelayOver30Rate": 1.0
+      }
+    },
+    {
+      "flight": "DP529",
+      "v1Prediction": 87.92898859537559,
+      "v2Prediction": 60.826384548732754,
+      "observedActual": 61.0,
+      "v1AbsoluteError": 26.928988595375586,
+      "v2AbsoluteError": 0.17361545126724565,
+      "v1HistoricalContext": {
+        "historicalProfileMedianDelay": 44.0,
+        "historicalProfileSampleSize": 0,
+        "historicalServiceMedianDelay": 44.0,
+        "historicalServiceSampleSize": 54,
+        "historicalRouteMedianDelay": 2.0,
+        "historicalRouteSampleSize": 729,
+        "historicalAirlineMedianDelay": 100.0,
+        "historicalAirlineSampleSize": 7136,
+        "historicalProfileDelayOver30Rate": 0.5555555555555556
+      },
+      "v2HistoricalContext": {
+        "historicalProfileMedianDelay": 6.5,
+        "historicalProfileSampleSize": 2,
+        "historicalServiceMedianDelay": 35.5,
+        "historicalServiceSampleSize": 74,
+        "historicalRouteMedianDelay": 1.0,
+        "historicalRouteSampleSize": 934,
+        "historicalAirlineMedianDelay": 95.0,
+        "historicalAirlineSampleSize": 9330,
+        "historicalProfileDelayOver30Rate": 0.0
+      }
+    }
+  ],
+  "metrics": {
+    "v1": {
+      "mae": 88.3034258633752,
+      "mse": 10115.009131483788,
+      "rmse": 100.57340170981485,
+      "medianAbsoluteError": 93.47290545293632
+    },
+    "v2": {
+      "mae": 88.05336552700264,
+      "mse": 12030.739498357174,
+      "rmse": 109.68472773525572,
+      "medianAbsoluteError": 107.01567820267059
+    }
+  }
+}

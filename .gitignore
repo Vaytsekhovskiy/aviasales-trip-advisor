@@ -2,6 +2,7 @@
 !src/main/resources/avia/delay-dashboard.html
 !src/main/resources/avia/offer-dashboard.html
 *.csv
+!ml/output/*.csv
 .idea
 target
 src/main/resources/models/price_model.onnx
@@ -15,3 +16,7 @@ __pycache__/
 pytest-cache-files-*/
 calendar-response.json
 offer-response.json
+models/*
+!models/.gitkeep
+!models/delay_model*.cbm
+!models/delay_model*_metadata.json
