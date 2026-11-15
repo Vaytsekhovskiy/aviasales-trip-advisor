@@ -4,6 +4,34 @@ Java-проект для анализа стоимости авиаперелё�
 
 Проект использует данные Aviasales / Travelpayouts API, MongoDB и ML-модель, экспортированную в формат ONNX.
 
+## Spring Boot backend
+
+Java-часть организована как Spring Boot 3 backend на Java 17. Maven-проект пока остаётся в корне репозитория: это сохраняет совместимость существующих относительных путей к `data/`, `reports/`, ресурсам и standalone-проверкам. Подробные границы пакетов описаны в [`docs/backend_architecture.md`](docs/backend_architecture.md).
+
+Запуск backend из корня:
+
+```powershell
+mvn spring-boot:run
+```
+
+Или после сборки:
+
+```powershell
+mvn clean package
+java -jar target/avia-backend.jar
+```
+
+Минимальные endpoints:
+
+- `GET /api/health` — состояние backend;
+- `GET /api/tasks` — metadata пяти учебных задач.
+
+Конфигурация читается из `MONGO_URI`, `AVIASALES_TOKEN` и `AERODATABOX_API_KEY`; значения секретов в репозитории не хранятся. Старый `avia.Main` сохранён как compatibility CLI facade. Для запуска CLI из Spring Boot archive используйте:
+
+```powershell
+java -Dloader.main=avia.Main -jar target/avia-backend.jar <аргументы старого CLI>
+```
+
 ## Содержание
 
 1. [Требования](#требования)
