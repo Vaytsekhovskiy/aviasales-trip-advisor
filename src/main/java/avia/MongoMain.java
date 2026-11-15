@@ -1,5 +1,15 @@
 package avia;
 
+import avia.common.price.DestinationNames;
+import avia.common.price.mongo.MongoSource;
+import avia.task1.analysis.CheapestDestinationAggregator;
+import avia.task1.analysis.SeasonalityAggregator;
+import avia.task1.model.PriceEntry;
+import avia.task1.report.HeatmapHtmlRenderer;
+import avia.task2.analysis.PairedTransferStats;
+import avia.task2.report.TransferChartsRenderer;
+import avia.task4.analysis.AirlineStats;
+import avia.task4.report.AirlineChartsRenderer;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;

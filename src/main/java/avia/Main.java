@@ -1,8 +1,19 @@
 
 package avia;
 
-import avia.model.FlightPredictionRequest;
-import avia.service.PricePredictionService;
+import avia.common.aviasales.AviasalesClient;
+import avia.common.aerodatabox.cli.DelayCli;
+import avia.common.price.cli.Cleaner;
+import avia.task3.cli.DatasetCli;
+import avia.task5.price.model.FlightPredictionRequest;
+import avia.task5.price.service.PricePredictionService;
+import avia.task1.analysis.CheapestDestinationAggregator;
+import avia.task1.analysis.SeasonalityAggregator;
+import avia.task1.model.PriceEntry;
+import avia.task1.report.HeatmapHtmlRenderer;
+import avia.task2.analysis.TransferComparisonAggregator;
+import avia.task2.model.TransferOffer;
+import avia.task2.report.TransferComparisonHtmlRenderer;
 
 import java.io.IOException;
 import java.io.PrintWriter;

@@ -1,7 +1,7 @@
 package avia.common.config;
 
-import avia.AviasalesClient;
-import avia.client.AeroDataBoxClient;
+import avia.common.aviasales.AviasalesClient;
+import avia.common.aerodatabox.AeroDataBoxClient;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
