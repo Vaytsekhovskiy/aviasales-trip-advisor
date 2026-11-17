@@ -35,17 +35,21 @@ Required artifacts:
 MongoDB sources:
 
 - `avia.flights` for historical features;
+- `avia.predictable_flight_profiles` as the common price + delay eligibility catalog.
 
-Delay prediction is independent from price-data availability. A future flight can receive a delay prediction
-even when no price model data is available for the same flight. `predictable_flight_profiles` is not queried
-or required by the delay predictor.
+Public Task 5 delay prediction is available only when the derived profile key exists as `_id` in
+`predictable_flight_profiles`. This collection is an eligibility catalog, not a training dataset. Delay-v2 training
+and historical features continue to use the full delay history. If a profile is absent, inference returns
+`UNSUPPORTED_PROFILE` without reading historical features or invoking CatBoost.
 
 For production-sized history, an index on `flights.scheduledDepartureUtc` is recommended. The pipeline does
 not create it automatically. MongoDB already indexes `_id` for the supported-profile lookup.
 
-## Request
+## Common request
 
-`scheduledDeparture` must contain a timezone offset. Local weekday and hour are computed before UTC conversion.
+Price and Delay use the same `FlightPredictionRequest` JSON contract. `scheduledDeparture` must contain a timezone
+offset; local weekday and hour are computed before UTC conversion. `predictionTimeUtc` is required, must be
+timezone-aware UTC (`Z` or `+00:00`), and must represent an instant strictly before departure.
 
 ```json
 {
@@ -53,7 +57,8 @@ not create it automatically. MongoDB already indexes `_id` for the supported-pro
   "flightNumber": "5104",
   "originIata": "AER",
   "destinationIata": "OVB",
-  "scheduledDeparture": "2026-11-21T13:20:00+03:00"
+  "scheduledDeparture": "2026-11-21T13:20:00+03:00",
+  "predictionTimeUtc": "2026-11-17T11:20:00Z"
 }
 ```
 
@@ -66,16 +71,28 @@ python -m ml.predict_delay --json-file request.json
 Or use explicit arguments:
 
 ```powershell
-python -m ml.predict_delay --airline S7 --flight-number 5104 --origin AER --destination OVB --scheduled-departure "2026-11-21T13:20:00+03:00"
+python -m ml.predict_delay `
+  --airline S7 `
+  --flight-number 5104 `
+  --origin AER `
+  --destination OVB `
+  --scheduled-departure "2026-11-21T13:20:00+03:00" `
+  --prediction-time-utc "2026-11-17T11:20:00Z"
 ```
 
 The command uses v2 by default. For an explicit artifact version, add `--model-version v1` or
 `--model-version v2`.
 
-Unknown profiles and services are valid. Historical values use the same fallback chain as training:
-exact profile → service → route → airline → strictly-past global history. Exact sample-size fields stay zero,
-so a fallback median is never presented as evidence of exact-profile observations. `historySupportLevel`
-identifies the most specific available level.
+For an eligible profile, historical values use the same fallback chain as training: exact profile → service →
+route → airline → strictly-past global history. The cutoff remains the future flight's `scheduledDepartureUtc`;
+`predictionTimeUtc` is accepted for common-contract compatibility and is not a delay-v2 ML feature.
+
+## Availability and future UI
+
+The frontend must not construct arbitrary airline/flight/route/weekday/hour combinations. It should first list
+profiles from `avia.predictable_flight_profiles`, then offer concrete future instances matching those profiles.
+When a user selects a flight, the backend forms the common request and sets `predictionTimeUtc` to current UTC.
+The concrete future-instance listing is outside this inference component.
 
 ## Response and exit codes
 
@@ -84,6 +101,7 @@ prediction, model version and historical context. No prediction is persisted.
 
 - `0`: successful prediction;
 - `2`: invalid request or unreadable JSON request file;
+- `3`: unsupported common profile;
 - `4`: missing model/configuration, MongoDB, or other inference infrastructure error.
 
 Example:
@@ -91,12 +109,14 @@ Example:
 ```json
 {
   "status": "OK",
+  "supportedProfile": true,
   "flight": {
     "airlineIata": "S7",
     "flightNumber": "5104",
     "originIata": "AER",
     "destinationIata": "OVB",
     "scheduledDeparture": "2026-11-21T13:20:00+03:00",
+    "predictionTimeUtc": "2026-11-17T11:20:00Z",
     "profileKey": "S7|5104|AER|OVB|SATURDAY|13"
   },
   "prediction": {
@@ -124,5 +144,5 @@ Example:
 python -m pytest
 ```
 
-The explicit-argument command above is also the read-only end-to-end smoke test used for the local profile
+The explicit-argument command above is also the read-only end-to-end smoke test when the local catalog contains
 `S7|5104|AER|OVB|SATURDAY|13`.

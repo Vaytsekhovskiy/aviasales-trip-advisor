@@ -11,16 +11,22 @@ from pathlib import Path
 
 from pymongo import MongoClient
 
-from .config import DATABASE, FLIGHTS_COLLECTION, MODEL_DIR, OUTPUT_DIR, mongo_uri
-from .predictor import DelayPredictor, FutureFlightRequest
+from .config import DATABASE, FLIGHTS_COLLECTION, MODEL_DIR, OUTPUT_DIR, PROFILES_COLLECTION, mongo_uri
+from .predictor import DelayPredictor, FlightPredictionRequest
 
 
 class SnapshotHistoryRepository:
     """One Mongo read for a batch; per-request temporal cutoff remains strict."""
     def __init__(self, maximum_cutoff: datetime, uri: str | None = None):
         with MongoClient(uri or mongo_uri()) as client:
-            self.documents = list(client[DATABASE][FLIGHTS_COLLECTION].find(
+            database = client[DATABASE]
+            self.documents = list(database[FLIGHTS_COLLECTION].find(
                 {"scheduledDepartureUtc": {"$lt": maximum_cutoff}}))
+            self.profile_keys = {str(row["_id"]) for row in
+                                 database[PROFILES_COLLECTION].find({}, {"_id": 1})}
+
+    def supports_profile(self, profile_key: str) -> bool:
+        return profile_key in self.profile_keys
 
     def read_before(self, cutoff_utc: datetime) -> list[dict]:
         return [row for row in self.documents if row.get("scheduledDepartureUtc") is not None
@@ -31,7 +37,11 @@ def run_batch(payloads: list[dict], predictor: DelayPredictor) -> dict:
     predictions, errors = [], []
     for index, payload in enumerate(payloads):
         try:
-            result = predictor.predict(FutureFlightRequest.from_dict(payload))
+            result = predictor.predict(FlightPredictionRequest.from_dict(payload))
+            if result["status"] == "UNSUPPORTED_PROFILE":
+                errors.append({"index": index, "request": payload, "status": result["status"],
+                               "message": result["message"]})
+                continue
             value = result["prediction"]["predictedDelayMin"]
             if not math.isfinite(value) or value < 0:
                 raise ValueError("Prediction must be finite and non-negative")
@@ -57,7 +67,8 @@ def run_batch(payloads: list[dict], predictor: DelayPredictor) -> dict:
 def _flat(row: dict) -> dict:
     context = row["historicalContext"]
     return {**{key: row[key] for key in ("airlineIata", "flightNumber", "originIata", "destinationIata",
-                                          "scheduledDeparture", "profileKey", "predictedDelayMin", "modelVersion")},
+                                          "scheduledDeparture", "predictionTimeUtc", "profileKey",
+                                          "predictedDelayMin", "modelVersion")},
             **context}
 
 
@@ -86,7 +97,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-stem", type=Path, default=OUTPUT_DIR / "external_2026-11-14_predictions")
     args = parser.parse_args(argv)
     payloads = json.loads(args.json_file.read_text(encoding="utf-8"))
-    requests = [FutureFlightRequest.from_dict(payload) for payload in payloads]
+    requests = [FlightPredictionRequest.from_dict(payload) for payload in payloads]
     maximum = max(request.schedule_row()["scheduledDepartureUtc"] for request in requests)
     repository = SnapshotHistoryRepository(maximum)
     predictor = DelayPredictor(repository, MODEL_DIR / "delay_model_v2.cbm",

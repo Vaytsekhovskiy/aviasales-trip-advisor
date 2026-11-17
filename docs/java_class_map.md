@@ -80,7 +80,7 @@ This inventory was prepared before moving Java sources. `avia.Main` and `avia.Mo
 | `src/main/java/avia/AirlineStats.java` | `AirlineStats` | Task 4 airline price-policy analysis | `avia.task4.analysis` |
 | `src/main/java/avia/AirlineChartsRenderer.java` | `AirlineChartsRenderer` | Task 4 legacy HTML report | `avia.task4.report` |
 | new | `Task4Service` | Task 4 reusable analysis facade | `avia.task4.service` |
-| `src/main/java/avia/model/FlightPredictionRequest.java` | `FlightPredictionRequest` | Task 5 price inference request | `avia.task5.price.model` |
+| `src/main/java/avia/model/FlightPredictionRequest.java` | `FlightPredictionRequest` | Common Task 5 price/delay inference request | `avia.task5.model` |
 | `src/main/java/avia/service/PricePredictionService.java` | `PricePredictionService` | Task 5 Java ONNX price inference | `avia.task5.price.service` |
 | new | `Task5PriceService` | Task 5 price application facade | `avia.task5.price.service` |
 | `src/main/java/avia/model/FlightServiceIdentity.java` | `FlightServiceIdentity` | Task 5 delay service identity | `avia.task5.delay.model` |

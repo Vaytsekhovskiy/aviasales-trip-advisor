@@ -25,7 +25,7 @@ class FakePredictor:
         return {"status": "OK", "flight": {"airlineIata": request.airlineIata,
                 "flightNumber": request.flightNumber, "originIata": request.originIata,
                 "destinationIata": request.destinationIata, "scheduledDeparture": request.scheduledDeparture,
-                "profileKey": row["profileKey"]},
+                "predictionTimeUtc": request.predictionTimeUtc, "profileKey": row["profileKey"]},
                 "prediction": {"predictedDelayMin": value, "modelVersion": "delay-v2"},
                 "historicalContext": {"historySupportLevel": "GLOBAL", "profileSampleSize": 0,
                     "profileMedianDelayMin": 0.0, "profileDelayOver30Rate": 0.0,
@@ -36,7 +36,8 @@ class FakePredictor:
 
 def payload(number):
     return {"airlineIata": "S7", "flightNumber": number, "originIata": "LED",
-            "destinationIata": "OVB", "scheduledDeparture": "2026-11-14T13:30:00+03:00"}
+            "destinationIata": "OVB", "scheduledDeparture": "2026-11-14T13:30:00+03:00",
+            "predictionTimeUtc": "2026-11-13T00:00:00Z"}
 
 
 def test_batch_preserves_success_order_and_isolates_errors():
@@ -49,3 +50,11 @@ def test_batch_preserves_success_order_and_isolates_errors():
     assert report["actualDelaysIncluded"] is False
     assert all("actualDelay" not in row and "observedActual" not in row for row in report["predictions"])
     json.dumps(report, allow_nan=False)
+
+
+def test_batch_requires_prediction_time_for_every_row():
+    invalid = payload("1")
+    del invalid["predictionTimeUtc"]
+    report = run_batch([invalid], FakePredictor())
+    assert report["successfulCount"] == 0 and report["errorCount"] == 1
+    assert "predictionTimeUtc" in report["errors"][0]["error"]

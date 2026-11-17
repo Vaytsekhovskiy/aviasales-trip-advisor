@@ -11,7 +11,7 @@ import pandas as pd
 from catboost import CatBoostRegressor
 from pymongo import MongoClient
 
-from .config import DATABASE, FLIGHTS_COLLECTION, MODEL_DIR, mongo_uri
+from .config import DATABASE, FLIGHTS_COLLECTION, MODEL_DIR, PROFILES_COLLECTION, mongo_uri
 from .features import (CATEGORICAL_FEATURES, MODEL_FEATURES, add_features, normalize_airline,
                        normalize_airport, normalize_flight_number, profile_key, route_key, service_key)
 from .historical_features import HISTORICAL_FEATURES, aggregate_historical_features
@@ -29,31 +29,43 @@ class PredictorConfigurationError(RuntimeError):
 
 
 @dataclass(frozen=True)
-class FutureFlightRequest:
+class FlightPredictionRequest:
     airlineIata: str
     flightNumber: str
     originIata: str
     destinationIata: str
     scheduledDeparture: str
+    predictionTimeUtc: str
     scheduledLocal: datetime
+    predictionTime: datetime
 
     @classmethod
-    def from_dict(cls, payload: dict) -> "FutureFlightRequest":
-        required = ("airlineIata", "flightNumber", "originIata", "destinationIata", "scheduledDeparture")
+    def from_dict(cls, payload: dict) -> "FlightPredictionRequest":
+        required = ("airlineIata", "flightNumber", "originIata", "destinationIata",
+                    "scheduledDeparture", "predictionTimeUtc")
         missing = [name for name in required if name not in payload or payload[name] is None]
         if missing:
             raise InvalidRequestError("Missing required field(s): " + ", ".join(missing))
         try:
-            text = str(payload["scheduledDeparture"]).strip()
-            scheduled = datetime.fromisoformat(text)
+            scheduled_text = str(payload["scheduledDeparture"]).strip()
+            scheduled = datetime.fromisoformat(scheduled_text)
             if scheduled.tzinfo is None or scheduled.utcoffset() is None:
                 raise InvalidRequestError("scheduledDeparture must include a timezone offset")
+            prediction_text = str(payload["predictionTimeUtc"]).strip()
+            prediction_time = datetime.fromisoformat(prediction_text)
+            if prediction_time.tzinfo is None or prediction_time.utcoffset() is None:
+                raise InvalidRequestError("predictionTimeUtc must include a UTC timezone offset")
+            if prediction_time.utcoffset().total_seconds() != 0:
+                raise InvalidRequestError("predictionTimeUtc must be a UTC timestamp (Z or +00:00)")
+            if prediction_time.astimezone(timezone.utc) >= scheduled.astimezone(timezone.utc):
+                raise InvalidRequestError("predictionTimeUtc must be earlier than scheduledDeparture")
             flight_number = normalize_flight_number(payload["flightNumber"])
             if not flight_number.isascii() or not flight_number.isalnum() or len(flight_number) > 8:
                 raise InvalidRequestError("flightNumber must contain 1-8 ASCII letters/digits")
             return cls(normalize_airline(payload["airlineIata"]), flight_number,
                        normalize_airport(payload["originIata"], "originIata"),
-                       normalize_airport(payload["destinationIata"], "destinationIata"), text, scheduled)
+                       normalize_airport(payload["destinationIata"], "destinationIata"),
+                       scheduled_text, prediction_text, scheduled, prediction_time)
         except InvalidRequestError:
             raise
         except (TypeError, ValueError) as error:
@@ -71,7 +83,8 @@ class FutureFlightRequest:
         return row
 
 
-class HistoryRepository(Protocol):
+class PredictionRepository(Protocol):
+    def supports_profile(self, profile_key: str) -> bool: ...
     def read_before(self, cutoff_utc: datetime) -> list[dict]: ...
 
 
@@ -83,11 +96,14 @@ class MongoHistoryRepository:
     def read_before(self, cutoff_utc: datetime) -> list[dict]:
         return list(self.db[FLIGHTS_COLLECTION].find({"scheduledDepartureUtc": {"$lt": cutoff_utc}}))
 
+    def supports_profile(self, profile_key: str) -> bool:
+        return self.db[PROFILES_COLLECTION].find_one({"_id": profile_key}, {"_id": 1}) is not None
+
     def close(self) -> None:
         self.client.close()
 
 
-def build_inference_features(request: FutureFlightRequest, documents: list[dict]) -> tuple[pd.DataFrame, dict]:
+def build_inference_features(request: FlightPredictionRequest, documents: list[dict]) -> tuple[pd.DataFrame, dict]:
     schedule = request.schedule_row()
     eligible = [row for row in documents if row.get("scheduledDepartureUtc") is not None]
     if eligible:
@@ -104,7 +120,7 @@ def build_inference_features(request: FutureFlightRequest, documents: list[dict]
 
 
 class DelayPredictor:
-    def __init__(self, repository: HistoryRepository, model_path: Path | None = None,
+    def __init__(self, repository: PredictionRepository, model_path: Path | None = None,
                  metadata_path: Path | None = None, model=None, metadata: dict | None = None):
         self.repository = repository
         self.model_path = model_path or MODEL_DIR / "delay_model_v2.cbm"
@@ -130,11 +146,17 @@ class DelayPredictor:
             raise PredictorConfigurationError("CatBoost artifact feature schema mismatch")
         self.model = model
 
-    def predict(self, request: FutureFlightRequest) -> dict:
+    def predict(self, request: FlightPredictionRequest) -> dict:
         flight = request.schedule_row()
         flight_result = {"airlineIata": request.airlineIata, "flightNumber": request.flightNumber,
                          "originIata": request.originIata, "destinationIata": request.destinationIata,
-                         "scheduledDeparture": request.scheduledDeparture, "profileKey": flight["profileKey"]}
+                         "scheduledDeparture": request.scheduledDeparture,
+                         "predictionTimeUtc": request.predictionTimeUtc,
+                         "profileKey": flight["profileKey"]}
+        if not self.repository.supports_profile(flight["profileKey"]):
+            return {"status": "UNSUPPORTED_PROFILE", "supportedProfile": False,
+                    "flight": flight_result,
+                    "message": "Flight is not available for joint price and delay prediction"}
         documents = self.repository.read_before(flight["scheduledDepartureUtc"])
         features, context = build_inference_features(request, documents)
         prediction = float(self.model.predict(features)[0])
@@ -144,7 +166,7 @@ class DelayPredictor:
         support_level = next((level for level, key in (("PROFILE", "historicalProfileSampleSize"),
                               ("SERVICE", "historicalServiceSampleSize"), ("ROUTE", "historicalRouteSampleSize"),
                               ("AIRLINE", "historicalAirlineSampleSize")) if context[key] > 0), "GLOBAL")
-        return {"status": "OK", "flight": flight_result,
+        return {"status": "OK", "supportedProfile": True, "flight": flight_result,
                 "prediction": {"predictedDelayMin": prediction,
                                "modelVersion": self.metadata["modelVersion"]},
                 "historicalContext": {
@@ -158,3 +180,8 @@ class DelayPredictor:
                     "routeMedianDelayMin": context["historicalRouteMedianDelay"],
                     "airlineSampleSize": int(context["historicalAirlineSampleSize"]),
                     "airlineMedianDelayMin": context["historicalAirlineMedianDelay"]}}
+
+
+# Backward-compatible import name for low-level tooling; this is the same DTO class,
+# not a second request schema.
+FutureFlightRequest = FlightPredictionRequest

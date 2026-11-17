@@ -9,7 +9,7 @@ from catboost import CatBoostRegressor
 
 from .config import MODEL_DIR, OUTPUT_DIR
 from .data_loader import load_data
-from .predictor import FINAL_FEATURES, FutureFlightRequest, build_inference_features
+from .predictor import FINAL_FEATURES, FlightPredictionRequest, build_inference_features
 from .historical_features import HISTORICAL_FEATURES
 from .evaluate import regression_metrics
 
@@ -42,8 +42,9 @@ def main() -> None:
     v1_model, v1_metadata = _load("v1"); v2_model, v2_metadata = _load("v2")
     rows = []
     for label, number, destination, scheduled, actual in FLIGHTS:
-        request = FutureFlightRequest.from_dict({"airlineIata": "DP", "flightNumber": number,
-            "originIata": "LED", "destinationIata": destination, "scheduledDeparture": scheduled})
+        request = FlightPredictionRequest.from_dict({"airlineIata": "DP", "flightNumber": number,
+            "originIata": "LED", "destinationIata": destination, "scheduledDeparture": scheduled,
+            "predictionTimeUtc": "2026-11-13T00:00:00Z"})
         future_utc = request.schedule_row()["scheduledDepartureUtc"]
         v2_documents = [row for row in documents if row.get("scheduledDepartureUtc") is not None
                         and pd.Timestamp(row["scheduledDepartureUtc"], tz="UTC") < pd.Timestamp(future_utc)]

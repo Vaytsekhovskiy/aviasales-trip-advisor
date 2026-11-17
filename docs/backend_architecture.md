@@ -57,9 +57,13 @@ REST не читает готовый HTML. В будущем controller смо�
 | 2 — прямые рейсы и пересадки | `avia.task2` | `Task2Service`, `TransferStats`, `PairedTransferStats`, `TransferComparisonAggregator` | `common.aviasales`, `common.price` |
 | 3 — описательный анализ задержек | `avia.task3` | `Task3Service`, `DelayAnalyzer`, `FlightHistoryAggregator`, `DelayVisualizationAggregator` | `common.aerodatabox`, `common.flight`, `common.mongo` |
 | 4 — цены авиакомпаний | `avia.task4` | `Task4Service`, `AirlineStats` | `common.price`, `common.price.mongo` |
-| 5 — ML-прогнозирование | `avia.task5.price`, `avia.task5.delay` | `Task5PricePredictionService`, `PricePredictionService`, `Task5DelayProfileService` | `common.flight`; Python `ml/` и `models/` |
+| 5 — ML-прогнозирование | `avia.task5.model`, `avia.task5.price`, `avia.task5.delay` | `FlightPredictionRequest`, `Task5PricePredictionService`, `PricePredictionService`, `Task5DelayProfileService` | `common.flight`; Python `ml/` и `models/` |
 
 Task 3 не импортирует классы из `task5` и содержит только descriptive analytics. `FlightRecord`, `FlightHistoricalStats`, `FlightServiceIdentity`, порядок наблюдений и Mongo readers являются shared infrastructure, потому что используются и Task 3, и Task 5 delay.
+
+`avia.task5.model.FlightPredictionRequest` — единый публичный DTO будущего `POST /api/tasks/5/predict` для обеих
+веток Task 5. Python delay inference зеркалирует тот же JSON contract. Перед delay inference профиль проверяется по
+`_id` в `avia.predictable_flight_profiles`; отсутствие профиля возвращает `UNSUPPORTED_PROFILE` до CatBoost.
 
 ## Shared/common
 

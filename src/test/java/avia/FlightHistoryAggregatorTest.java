@@ -26,7 +26,7 @@ import avia.task4.report.*;
 import avia.task5.delay.model.*;
 import avia.task5.delay.mongo.*;
 import avia.task5.delay.service.*;
-import avia.task5.price.model.*;
+import avia.task5.model.*;
 import avia.task5.price.service.*;
 import avia.common.flight.storage.CsvFlightStorage;
 import java.lang.reflect.RecordComponent;

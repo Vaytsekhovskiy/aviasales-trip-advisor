@@ -5,7 +5,7 @@ import avia.common.aviasales.AviasalesClient;
 import avia.common.aerodatabox.cli.DelayCli;
 import avia.common.price.cli.Cleaner;
 import avia.task3.cli.DatasetCli;
-import avia.task5.price.model.FlightPredictionRequest;
+import avia.task5.model.FlightPredictionRequest;
 import avia.task5.price.service.PricePredictionService;
 import avia.task1.analysis.CheapestDestinationAggregator;
 import avia.task1.analysis.SeasonalityAggregator;

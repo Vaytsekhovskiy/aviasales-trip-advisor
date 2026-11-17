@@ -2,7 +2,7 @@ package avia.task5.price.service;
 
 import ai.onnxruntime.*;
 
-import avia.task5.price.model.FlightPredictionRequest;
+import avia.task5.model.FlightPredictionRequest;
 
 import java.io.InputStream;
 import java.nio.FloatBuffer;
