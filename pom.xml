@@ -22,6 +22,17 @@
       <artifactId>json</artifactId>
       <version>20240303</version>
     </dependency>
+    <!-- Mongodb -->
+    <dependency>
+      <groupId>org.mongodb</groupId>
+      <artifactId>mongodb-driver-sync</artifactId>
+      <version>5.1.0</version>
+    </dependency>
+    <dependency>
+      <groupId>com.microsoft.onnxruntime</groupId>
+      <artifactId>onnxruntime</artifactId>
+      <version>1.31.1</version>
+    </dependency>
   </dependencies>
 
   <build>
