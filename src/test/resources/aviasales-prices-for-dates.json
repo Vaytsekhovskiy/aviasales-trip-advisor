@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "flight_number": "6525",
+      "origin_airport": "SVO",
+      "destination_airport": "OVB",
+      "departure_at": "2026-10-26T22:45:00+03:00",
+      "airline": "DP",
+      "price": 4773,
+      "duration": 245,
+      "transfers": 0
+    }
+  ],
+  "currency": "rub",
+  "success": true
+}
