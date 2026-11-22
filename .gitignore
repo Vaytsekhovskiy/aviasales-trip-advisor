@@ -4,6 +4,7 @@
 *.csv
 .idea
 target
+src/main/resources/models/price_model.onnx
 data/
 .env
 .env.*

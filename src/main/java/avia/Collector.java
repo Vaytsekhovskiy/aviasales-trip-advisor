@@ -37,9 +37,9 @@ import java.util.Map;
  */
 public class Collector {
 
-    private static final String MONGO_URI = System.getenv().getOrDefault(
+    static final String MONGO_URI = System.getenv().getOrDefault(
             "MONGO_URI", "mongodb://localhost:27017/?serverSelectionTimeoutMS=3000");
-    private static final String DB_NAME = "avia";
+    static final String DB_NAME = "avia";
     private static final long PAUSE_MS = 300; // пауза между запросами, чтобы не упереться в лимиты
 
     private static final HttpClient HTTP = HttpClient.newHttpClient();
