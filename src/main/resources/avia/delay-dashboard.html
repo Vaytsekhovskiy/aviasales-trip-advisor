@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Анализ задержек авиарейсов</title>
+<style>
+:root{--ink:#192b40;--muted:#5a6d80;--line:#dae3ec;--blue:#2765ad;--teal:#167d86}
+*{box-sizing:border-box}body{margin:0;background:#f1f5f9;color:var(--ink);font:15px/1.55 system-ui,sans-serif}
+main{max-width:1360px;margin:auto;padding:32px}header{padding:24px 0 30px;border-bottom:1px solid var(--line)}
+.eyebrow{color:var(--teal);font-size:12px;font-weight:750;letter-spacing:2px}h1{font-size:clamp(26px,4vw,42px);line-height:1.15;margin:12px 0}
+h2{font-size:22px;line-height:1.3;margin:0 0 10px}.muted,small{color:var(--muted)}.lede{max-width:900px}
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:26px 0}.kpi,.card{background:#fff;border:1px solid var(--line);border-radius:14px}
+.kpi{padding:18px}.kpi strong{display:block;font-size:27px;margin-top:8px;font-variant-numeric:tabular-nums}.kpi small{display:block;margin-top:4px}
+.kpi:nth-child(4) strong{font-size:18px;line-height:1.6}
+.card{padding:26px;margin:22px 0;box-shadow:0 3px 14px #172b4010}.number{color:var(--teal);margin-right:12px;font-weight:500}
+.note{border-left:3px solid var(--teal);padding:10px 16px;background:#e9f3f5;border-radius:0 6px 6px 0}
+.chart{overflow-x:auto}svg{display:block;width:100%;min-width:680px}svg text{font-family:system-ui,sans-serif;fill:var(--muted);font-size:12px}
+.scroll{overflow:auto}table{width:100%;border-collapse:collapse;font-size:13px;font-variant-numeric:tabular-nums}
+th,td{padding:9px 10px;border-bottom:1px solid var(--line);text-align:right;white-space:nowrap}th{color:var(--muted);background:#f7f9fc;font-weight:600}th:first-child,td:first-child{text-align:left}
+summary{cursor:pointer;color:var(--blue);padding:14px 0;font-weight:600}.heat{min-width:1120px}.heat td{padding:8px 3px;text-align:center;border:3px solid #fff;border-radius:6px;min-width:40px}
+.heat td small{display:block;font-size:9px;color:inherit}.heat .empty{background:#f1f4f7;color:#697987}
+.heat .low{background:repeating-linear-gradient(135deg,#f3f5f8,#f3f5f8 5px,#e0e5eb 5px,#e0e5eb 7px);color:#64748b}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0;font-size:12px}.legend span:before{content:'';display:inline-block;width:13px;height:13px;background:var(--swatch);margin-right:6px;border:1px solid #0002;border-radius:3px}
+.scatterwrap{max-width:850px;margin:auto;position:relative}canvas{display:block;width:100%;aspect-ratio:1;border:1px solid var(--line);border-radius:8px}
+.toolbar{display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:16px 0}select{font:inherit;padding:8px;border:1px solid var(--line);border-radius:6px;background:white}
+.pill{padding:6px 12px;background:#edf4f9;border-radius:20px;font-size:13px}.tooltip{position:fixed;display:none;pointer-events:none;background:#132c43;color:white;border-radius:6px;padding:10px;z-index:5;font-size:12px;white-space:pre-line}
+footer{margin:32px 0;color:var(--muted);font-size:13px}button:focus,select:focus,summary:focus{outline:2px solid var(--blue)}
+@media(max-width:700px){main{padding:16px}.card{padding:16px}.kpis{grid-template-columns:repeat(2,1fr)}.kpi strong{font-size:22px}}
+@media print{body{background:white}.card{box-shadow:none;break-inside:avoid}main{padding:0}.kpis{grid-template-columns:repeat(4,1fr)}svg{min-width:0}.scroll{overflow:visible}}
+</style>
+</head>
+<body><main>
+<header><div class="eyebrow">AERODATABOX / ИССЛЕДОВАТЕЛЬСКИЙ ОТЧЁТ</div><h1>Анализ задержек авиарейсов</h1>
+<p id="period" class="muted"></p><p class="lede">Когда задержки встречаются чаще и какая их часть компенсируется к прилёту? Сравниваем наблюдения по локальному расписанию вылета. Основная величина — медиана: она менее чувствительна к экстремальным задержкам, чем среднее.</p></header>
+<noscript><p class="note">Для отображения графиков включите JavaScript. Все данные встроены в этот файл; интернет не нужен.</p></noscript>
+<div id="kpis" class="kpis"></div><p id="quality" class="note"></p>
+<section class="card"><h2><span class="number">01</span>Задержка вылета по дням недели</h2><p class="muted">Медианная задержка вылета, минуты. Дни расположены с понедельника по воскресенье. Наведите на столбец для деталей.</p><div id="weekdays" class="chart"></div><div id="weekdays-table"></div></section>
+<section class="card"><h2><span class="number">02</span>Зависимость задержки от дня недели и часа вылета</h2><p id="heat-note" class="muted"></p><div id="heatmap" class="scroll"></div><div class="legend">
+<span style="--swatch:#bedee9">Раньше расписания</span><span style="--swatch:#d8eadf">0–15 мин</span><span style="--swatch:#ffedbb">&gt;15–30 мин</span><span style="--swatch:#ffc58e">&gt;30–60 мин</span><span style="--swatch:#ec9d98">&gt;60 мин</span><span style="--swatch:#e4e8ed">Недостаточно данных</span></div></section>
+<section class="card"><h2><span class="number">03</span>Задержки по аэропортам</h2><p class="muted">Группировка по аэропорту вылета. При большом числе аэропортов прокрутите график по горизонтали. Arrivals добавляют аэропорты вне исходного плана сбора: их покрытие частичное. Отмены показаны отдельно в таблице, их знаменатель — все рейсы группы.</p><div id="airports" class="chart"></div><div id="airports-table"></div></section>
+<section class="card"><h2><span class="number">04</span>Авиакомпании по медианной задержке вылета</h2><p id="airline-note" class="muted"></p><div id="airlines" class="chart"></div><div id="airlines-table"></div></section>
+<section class="card"><h2><span class="number">05</span>Задержка вылета и задержка прилёта</h2><p class="muted">Каждая точка — неотменённый рейс с обеими задержками. Ниже линии y = x задержка уменьшилась, выше — увеличилась. Отрицательные значения означают опережение расписания.</p><div id="recovery" class="toolbar"></div>
+<div class="toolbar"><label for="range">Диапазон точек:</label><select id="range"><option value="central">Центральный диапазон P1–P99</option><option value="all">Все значения</option></select><span id="scatter-count" class="muted"></span></div>
+<div class="scatterwrap"><canvas id="scatter" width="850" height="850" role="img" aria-label="Задержка вылета по X, задержка прилёта по Y, в минутах"></canvas></div>
+<p class="muted">P1–P99 вычислены по объединённым координатам обеих задержек; ноль включён в диапазон. Ограничение касается только отображения. Все пары участвуют в сводных метриках, полный набор доступен переключателем.</p></section>
+<section class="card"><h2><span class="number">06</span>Динамика задержек по датам</h2><p class="muted">Медиана по календарной дате scheduled departure local. Пропуски отображаются разрывами, а не нулевой задержкой.</p><div id="daily" class="chart"></div><div id="daily-table"></div></section>
+<footer>Источник: нормализованные физические рейсы AeroDataBox. N — число неотменённых рейсов с доступной задержкой соответствующего типа. Для P(delay &gt; 15/30/60) используются строгие пороги и только доступные задержки вылета. Отмены исключены из задержек; их доля рассчитана по всем рейсам. В этой версии используются все доступные delay-значения без дополнительного фильтра статусов, как в FlightHistoryAggregator. Revised time может оставаться оценкой API. Наблюдаемые различия не доказывают причинность; состав маршрутов, сезон и полнота данных влияют на сравнения. Повторная дедупликация не выполнялась.</footer>
+</main><div id="tooltip" class="tooltip"></div>
+<script id="dashboard-data" type="application/json">__DASHBOARD_DATA__</script>
+<script>
+'use strict';
+const D=JSON.parse(document.getElementById('dashboard-data').textContent), ns='http://www.w3.org/2000/svg';
+const dayNames=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+const f=n=>n==null?'—':Number(n).toLocaleString('ru-RU',{maximumFractionDigits:1});
+const pct=n=>n==null?'—':f(n*100)+'%';
+function el(tag,text,attrs={}){const e=document.createElement(tag);if(text!=null)e.textContent=text;for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);return e;}
+function svgEl(tag,attrs={},text){const e=document.createElementNS(ns,tag);for(const [k,v]of Object.entries(attrs))e.setAttribute(k,v);if(text!=null)e.textContent=text;return e;}
+function tip(g){return `${g.label}\nMedian: ${f(g.median)} мин\nMean: ${f(g.mean)} мин\nP > 15: ${pct(g.p15)}\nP > 30: ${pct(g.p30)}\nP > 60: ${pct(g.p60)}\nN: ${g.n}\nФизических рейсов: ${g.flights}`;}
+function title(node,text){node.append(svgEl('title',{},text));}
+function label(g){return dayNames.includes(g.label[0]+g.label.slice(1).toLowerCase())?g.label[0]+g.label.slice(1).toLowerCase():g.label;}
+document.getElementById('period').textContent=`${D.source} · Период local departure: ${D.from||'нет данных'} — ${D.to||'нет данных'}`;
+const t=D.total;
+for(const [name,value,note]of [ ['Физических рейсов',f(t.flights),'Без повторной дедупликации'],['Аэропортов вылета',f(D.airportCount),'Известные коды'],['Авиакомпаний',f(D.airlineCount),'Известные коды'],['Период данных',D.from?`${D.from} — ${D.to}`:'—','Scheduled departure local'],['Медиана вылета',f(t.median)+' мин',`N = ${f(t.n)}`],['Средняя задержка',f(t.mean)+' мин',`N = ${f(t.n)}`],['P(delay > 30 мин)',pct(t.p30),`N = ${f(t.n)}`],['Доля отмен',pct(t.cancellations),`Всего рейсов = ${f(t.flights)}`]]){
+ const card=el('div',null,{class:'kpi'});card.append(el('span',name),el('strong',value),el('small',note));document.getElementById('kpis').append(card);
+}
+document.getElementById('quality').textContent=`Доступные задержки: вылет N=${f(t.n)}, прилёт N=${f(t.arrivalN)}. Без локального расписания вылета: ${f(D.missingLocalDeparture)} — учтены в общих KPI, исключены из групп по дню, часу и дате. Null не заменяется нулём. Все сравнения без фильтров аэропорта/авиакомпании.`;
+function table(id,rows){const details=el('details'),summary=el('summary','Точные значения и размеры выборок'),wrap=el('div',null,{class:'scroll'}),table=el('table'),head=el('tr');
+ ['Группа','Рейсов','N вылета','Медиана, мин','Среднее, мин','P > 15','P > 30','P > 60','Доля отмен'].forEach(s=>head.append(el('th',s)));table.append(head);
+ for(const g of rows){const tr=el('tr');[label(g),f(g.flights),f(g.n),f(g.median),f(g.mean),pct(g.p15),pct(g.p30),pct(g.p60),pct(g.cancellations)].forEach(s=>tr.append(el('td',s)));table.append(tr);}
+ wrap.append(table);details.append(summary,wrap);document.getElementById(id).append(details);
+}
+function bounds(rows){const vals=rows.map(g=>g.median).filter(v=>v!=null);let low=Math.min(0,...vals),high=Math.max(0,...vals);if(low===high)high=low+1;return [low,high];}
+function bars(id,rows,horizontal=false){const host=document.getElementById(id);if(!rows.length){host.append(el('p','Нет групп с достаточным N.'));return;}
+ const W=Math.max(960,horizontal?960:rows.length*76),H=horizontal?Math.max(240,rows.length*42+70):350;
+ const s=svgEl('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':'Медианная задержка вылета в минутах'});if(!horizontal&&rows.length>15)s.style.minWidth=W+'px';host.append(s);
+ const [low,high]=bounds(rows),L=horizontal?105:60,R=horizontal?W-185:W-50,T=25,B=H-55;
+ const scale=v=>horizontal?L+(v-low)/(high-low)*(R-L):B-(v-low)/(high-low)*(B-T),zero=scale(0);
+ for(let i=0;i<=5;i++){const v=low+(high-low)*i/5,p=scale(v);s.append(svgEl('line',horizontal?{x1:p,x2:p,y1:T,y2:B,stroke:'#dae3ec'}:{x1:L,x2:R,y1:p,y2:p,stroke:'#dae3ec'}));s.append(svgEl('text',horizontal?{x:p,y:B+22,'text-anchor':'middle'}:{x:L-8,y:p+4,'text-anchor':'end'},f(v)));}
+ s.append(svgEl('text',{x:L,y:H-5},'Медианная задержка, мин'));
+ const step=(horizontal?B-T:R-L)/rows.length;
+ rows.forEach((g,i)=>{const at=(horizontal?T:L)+step*(i+.5);s.append(svgEl('text',horizontal?{x:L-10,y:at+4,'text-anchor':'end'}:{x:at,y:B+20,'text-anchor':'middle'},label(g)));
+ if(g.median==null){s.append(svgEl('text',horizontal?{x:L+8,y:at+4}:{x:at,y:zero-10,'text-anchor':'middle'},'—'));return;}
+ const p=scale(g.median),bar=svgEl('rect',horizontal?{x:Math.min(p,zero),y:at-step*.27,width:Math.max(1,Math.abs(p-zero)),height:step*.54,fill:'#2765ad'}:{x:at-step*.3,y:Math.min(p,zero),width:step*.6,height:Math.max(1,Math.abs(p-zero)),fill:'#2765ad'});
+ title(bar,tip(g));s.append(bar);s.append(svgEl('text',horizontal?{x:W-20,y:at+4,'text-anchor':'end'}:{x:at,y:Math.max(12,Math.min(p,zero)-8),'text-anchor':'middle'},`${f(g.median)} · N=${g.n}`));});
+}
+bars('weekdays',D.weekdays);table('weekdays-table',D.weekdays);
+bars('airports',D.airports);table('airports-table',D.airports);
+document.getElementById('airline-note').textContent=`До 15 авиакомпаний по убыванию медианы, только N ≥ ${D.airlineMin} доступных задержек вылета. Это сравнение текущей выборки, не оценка качества авиакомпании.`;
+bars('airlines',D.airlines,true);table('airlines-table',D.airlines);
+document.getElementById('heat-note').textContent=`Столбцы — локальный час вылета 0–23. Цвет — медиана в минутах, подпись — N. При N < ${D.heatmapMin} клетка нейтральна; «—» означает отсутствие наблюдений.`;
+const heat=el('table',null,{class:'heat'}),hr=el('tr');hr.append(el('th','День / час'));for(let h=0;h<24;h++)hr.append(el('th',h));heat.append(hr);
+function color(v){return v<0?'#bedee9':v<=15?'#d8eadf':v<=30?'#ffedbb':v<=60?'#ffc58e':'#ec9d98';}
+for(let d=0;d<7;d++){const tr=el('tr');tr.append(el('th',dayNames[d]));for(let h=0;h<24;h++){
+ const g=D.heatmap[d*24+h],ok=g.n>=D.heatmapMin,td=el('td',ok?f(g.median):(g.n?'·':'—'));
+ td.className=!g.n?'empty':!ok?'low':'';if(ok)td.style.background=color(g.median);td.append(el('small',`N=${g.n}`));
+ td.title=`${dayNames[d]}, ${h}:00\n${ok?tip(g):'Недостаточно данных; N='+g.n+'\nP > 30: '+pct(g.p30)}`;tr.append(td);}heat.append(tr);}
+document.getElementById('heatmap').append(heat);
+function daily(){const rows=D.daily,host=document.getElementById('daily');if(!rows.length){host.append(el('p','Нет дат для отображения.'));return;}
+ const W=Math.max(1000,rows.length*15),H=350,L=60,R=W-30,T=25,B=H-65,s=svgEl('svg',{viewBox:`0 0 ${W} ${H}`,role:'img','aria-label':'Медиана задержки по датам'});host.append(s);
+ const [lo,hi]=bounds(rows),x=i=>L+i/Math.max(1,rows.length-1)*(R-L),y=v=>B-(v-lo)/(hi-lo)*(B-T);
+ for(let i=0;i<=5;i++){const v=lo+(hi-lo)*i/5,p=y(v);s.append(svgEl('line',{x1:L,x2:R,y1:p,y2:p,stroke:'#dae3ec'}),svgEl('text',{x:L-8,y:p+4,'text-anchor':'end'},f(v)));}
+ let path='',previous=false;rows.forEach((g,i)=>{if(g.median==null){previous=false;return;}path+=(previous?' L':' M')+x(i)+' '+y(g.median);previous=true;});s.append(svgEl('path',{d:path,fill:'none',stroke:'#167d86','stroke-width':2.5}));
+ rows.forEach((g,i)=>{if(g.median!=null){const c=svgEl('circle',{cx:x(i),cy:y(g.median),r:4,fill:'#167d86'});title(c,tip(g));s.append(c);}if(i%Math.max(1,Math.ceil(rows.length/10))===0||i===rows.length-1)s.append(svgEl('text',{x:x(i),y:B+28,'text-anchor':'middle'},g.label));});
+ s.append(svgEl('text',{x:L,y:H-5},'Календарная дата · медианная задержка, мин'));
+}daily();table('daily-table',D.daily);
+const rec=D.recovery,points=rec.points;
+for(const text of [`Медиана компенсации: ${f(rec.median)} мин`,`Задержка уменьшилась: ${pct(rec.recovered)}`,`Увеличилась: ${pct(rec.worsened)}`,`Не изменилась: ${pct(rec.unchanged)}`,`N пар = ${f(points.length)}`])document.getElementById('recovery').append(el('span',text,{class:'pill'}));
+const canvas=document.getElementById('scatter'),ctx=canvas.getContext('2d'),tooltip=document.getElementById('tooltip');let visible=[];
+function scatter(){let lo=rec.low,hi=rec.high;if(document.getElementById('range').value==='all'){lo=0;hi=1;for(const p of points){lo=Math.min(lo,p[0],p[1]);hi=Math.max(hi,p[0],p[1]);}}
+ if(hi<=lo)hi=lo+1;const L=80,R=810,T=35,B=765,x=v=>L+(v-lo)/(hi-lo)*(R-L),y=v=>B-(v-lo)/(hi-lo)*(B-T);
+ ctx.clearRect(0,0,850,850);ctx.fillStyle='#fff';ctx.fillRect(0,0,850,850);ctx.font='13px system-ui';
+ for(let i=0;i<=5;i++){const v=lo+(hi-lo)*i/5;ctx.strokeStyle='#e0e7ef';ctx.beginPath();ctx.moveTo(x(v),T);ctx.lineTo(x(v),B);ctx.moveTo(L,y(v));ctx.lineTo(R,y(v));ctx.stroke();ctx.fillStyle='#5a6d80';ctx.textAlign='center';ctx.fillText(f(v),x(v),B+24);ctx.textAlign='right';ctx.fillText(f(v),L-10,y(v)+4);}
+ visible=[];ctx.save();ctx.beginPath();ctx.rect(L,T,R-L,B-T);ctx.clip();ctx.fillStyle='rgba(39,101,173,0.23)';
+ for(const p of points){if(p[0]<lo||p[0]>hi||p[1]<lo||p[1]>hi)continue;const px=x(p[0]),py=y(p[1]);visible.push([px,py,p]);ctx.beginPath();ctx.arc(px,py,2,0,Math.PI*2);ctx.fill();}
+ ctx.strokeStyle='#bd4f36';ctx.lineWidth=2;ctx.setLineDash([7,5]);ctx.beginPath();ctx.moveTo(x(lo),y(lo));ctx.lineTo(x(hi),y(hi));ctx.stroke();ctx.restore();ctx.setLineDash([]);
+ ctx.fillStyle='#bd4f36';ctx.textAlign='right';ctx.fillText('y = x',R-8,T+18);ctx.fillStyle='#192b40';ctx.textAlign='center';ctx.fillText('Задержка вылета, минуты',445,830);ctx.save();ctx.translate(22,400);ctx.rotate(-Math.PI/2);ctx.fillText('Задержка прилёта, минуты',0,0);ctx.restore();
+ if(!points.length)ctx.fillText('Нет рейсов с обеими задержками',445,400);
+ document.getElementById('scatter-count').textContent=`Показано ${f(visible.length)} из ${f(points.length)}; вне диапазона ${f(points.length-visible.length)}`;
+}
+canvas.addEventListener('mousemove',e=>{const r=canvas.getBoundingClientRect(),x=(e.clientX-r.left)*850/r.width,y=(e.clientY-r.top)*850/r.height;let best=null,dist=64;for(const p of visible){const v=(p[0]-x)**2+(p[1]-y)**2;if(v<dist){dist=v;best=p[2];}}if(!best){tooltip.style.display='none';return;}tooltip.textContent=`Вылет: ${f(best[0])} мин\nПрилёт: ${f(best[1])} мин\nКомпенсация: ${f(best[0]-best[1])} мин`;tooltip.style.display='block';tooltip.style.left=Math.min(e.clientX+14,innerWidth-230)+'px';tooltip.style.top=Math.max(8,Math.min(e.clientY+14,innerHeight-100))+'px';});
+canvas.addEventListener('mouseleave',()=>tooltip.style.display='none');document.getElementById('range').addEventListener('change',scatter);scatter();
+</script></body></html>
