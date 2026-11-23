@@ -90,7 +90,7 @@ class PredictionRepository(Protocol):
 
 class MongoHistoryRepository:
     def __init__(self, uri: str | None = None):
-        self.client = MongoClient(uri or mongo_uri())
+        self.client = MongoClient(uri or mongo_uri(), serverSelectionTimeoutMS=5000)
         self.db = self.client[DATABASE]
 
     def read_before(self, cutoff_utc: datetime) -> list[dict]:

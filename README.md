@@ -4,29 +4,64 @@ Java-проект для анализа стоимости авиаперелё�
 
 Проект использует данные Aviasales / Travelpayouts API, MongoDB и ML-модель, экспортированную в формат ONNX.
 
-## Spring Boot backend
+## Единое приложение
 
-Java-часть организована как Spring Boot 3 backend на Java 17. Maven-проект пока остаётся в корне репозитория: это сохраняет совместимость существующих относительных путей к `data/`, `reports/`, ресурсам и standalone-проверкам. Подробные границы пакетов описаны в [`docs/backend_architecture.md`](docs/backend_architecture.md).
+Spring Boot обслуживает REST и веб-интерфейс пяти задач на одном порту. Для аналитики приложение читает `avia.offers_clean` и `avia.flights`. Выбор рейсов для Task 5 использует `avia.raw_prices_for_dates` и `avia.predictable_flight_profiles`. Чтение результатов работает без ключей внешних API.
 
-Запуск backend из корня:
+### Запуск с готовыми данными
 
-```powershell
-mvn spring-boot:run
-```
-
-Или после сборки:
+Нужны JDK 17+, Maven и Docker Compose с Linux-контейнерами. Поместите сжатый дамп `avia_archive` в корень репозитория, а исходный `price_model.onnx` — в `src/main/resources/models/`. Для исходной модели размером 1,36 ГБ сначала сохраните компактное представление ONNX. Оно хранит индексы, пороги и веса тех же деревьев в массивах и выполняется в ONNX Runtime. Исходный файл сохраняется.
 
 ```powershell
 mvn clean package
-java -jar target/avia-backend.jar
+python -m pip install onnx
+python deploy/compact_price_model.py src/main/resources/models/price_model.onnx target/price_model_runtime.onnx
+$env:AVIA_PRICE_MODEL_FILE = "./target/price_model_runtime.onnx"
+Copy-Item .env.example .env
+docker compose up --build -d
+docker compose ps
 ```
 
-Минимальные endpoints:
+Откройте [веб-интерфейс на localhost:8080](http://localhost:8080). При первом запуске Compose восстанавливает дамп в новый том MongoDB. Можно наблюдать за импортом через `docker compose logs -f mongo`. Следующие запуски используют этот том, включая загруженные через приложение данные.
 
-- `GET /api/health` — состояние backend;
-- `GET /api/tasks` — metadata пяти учебных задач.
+Для загрузки свежих данных укажите `AVIASALES_TOKEN` и `AERODATABOX_API_KEY` в `.env`. В форме обновления можно отключить запрос к источнику и обработать уже сохранённые сырые наблюдения. В Task 5 это пересчитает общий каталог из накопленной истории. `MONGO_DATABASE` задаёт имя базы для Java и Python. Compose читает `MONGO_URI` при использовании существующего экземпляра MongoDB. Без этой переменной используется MongoDB из Compose.
 
-Конфигурация читается из `MONGO_URI`, `AVIASALES_TOKEN` и `AERODATABOX_API_KEY`; значения секретов в репозитории не хранятся. Старый `avia.Main` сохранён как compatibility CLI facade. Для запуска CLI из Spring Boot archive используйте:
+Для выдачи готовой папки выполните `pwsh -File deploy/package.ps1 -RuntimePriceModel target/price_model_runtime.onnx` после сборки JAR и подготовки модели. Папка `target/avia-distribution` содержит JAR, Compose, конфигурацию, дамп и обе модели. Исходная модель сохранена в `models/original/price_model.onnx`. Получателю потребуется Docker Compose. ONNX-файл и дамп исключены из Git.
+
+### Разработка без Docker
+
+Запустите MongoDB с подготовленными данными и задайте `MONGO_URI` в обоих процессах. В одном терминале запустите Spring Boot, а для совместных прогнозов во втором поднимите Python-сервис.
+
+```powershell
+$env:MONGO_URI = "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000"
+mvn spring-boot:run
+```
+
+```powershell
+$env:MONGO_URI = "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000"
+python -m pip install -r requirements.txt
+python -m ml.serve_delay
+```
+
+Java использует `PRICE_MODEL_PATH` для пути к модели и `DELAY_SERVICE_URL` для адреса CatBoost. Для переданной большой модели задайте `$env:PRICE_MODEL_PATH = "target/price_model_runtime.onnx"`. По умолчанию берутся `src/main/resources/models/price_model.onnx` и `http://127.0.0.1:8090`. Для просмотра аналитики и списка вылетов достаточно Java и MongoDB.
+
+### REST API
+
+| Метод и путь | Назначение |
+|---|---|
+| `GET /api/health`, `GET /api/tasks` | Проверка работы backend и список задач |
+| `GET /api/tasks/1/results` | Календарные теплокарты. Фильтры `origin`, `destination`, `month` |
+| `GET /api/tasks/2/results` | Прямые и пересадочные цены. Фильтры `origin`, `month`, `minPairs`, `allSnapshots` |
+| `GET /api/tasks/3/results` | История задержек. Фильтры `from`, `to`, `airports` (список IATA), `minSamples` |
+| `GET /api/tasks/4/results` | Цены авиакомпаний. Фильтры `origin`, `month`, `minPairs`, `minDestinations`, `directOnly`, `allSnapshots` |
+| `GET /api/tasks/5/flights` | Конкретные будущие вылеты. Фильтры `origin`, `destination`, `date` и номер страницы `page` |
+| `POST /api/tasks/5/predict` | Один `FlightPredictionRequest` и ответ с полями `flight`, `price`, `delay` |
+| `POST /api/tasks/{id}/pipeline` | Запуск фонового задания. Возвращает HTTP 202 и `jobId` |
+| `GET /api/jobs/{jobId}` | Статусы `QUEUED`, `COLLECTING`, `PREPROCESSING`, `ANALYZING`, `COMPLETED` или `FAILED` |
+
+В Task 2 и Task 4 приложение по умолчанию сопоставляет минимумы по датам из всех срезов, чтобы работали накопленные данные. `allSnapshots=false` включает сравнение внутри одного среза. В запросе обновления для задач 1, 2 и 4 используются `origin`, `destinations`, `month` и `maxRequests`, для задачи 3 — `airports`, `from`, `to` и `maxRequests` (лимит новых окон). Флаг `collect=false` отключает внешнюю загрузку. Для Task 5 принимаются `minDelayFlights`, `minPriceFlights` и параметры ценового сбора, если `collect=true`. Приложение выполняет одно обновление за раз, задания хранятся до перезапуска backend.
+
+Прежние команды доступны через `avia.Main`. Для запуска CLI из Spring Boot JAR используйте:
 
 ```powershell
 java -Dloader.main=avia.Main -jar target/avia-backend.jar <аргументы старого CLI>
@@ -439,11 +474,11 @@ J --mongo --airlines MOW
 }
 ```
 
-Совместный прогноз Price + Delay доступен только для профилей из
-`avia.predictable_flight_profiles`. Это каталог доступности, а не обучающая выборка. `predictionTimeUtc` — текущий
-UTC timestamp в момент запроса: price model использует его для time-to-departure признаков, а delay-v2 принимает
-для совместимости контракта, не используя как ML feature. Будущий UI должен предлагать конкретные рейсы только из
-общего каталога профилей, а не позволять собирать произвольную комбинацию полей вручную.
+Совместный прогноз доступен для конкретных будущих вылетов из ценовых снимков, которые совпадают с профилем из
+`avia.predictable_flight_profiles` по авиакомпании, номеру, аэропортам, локальному дню недели и часу. При запросе
+Spring Boot перепроверяет наличие вылета и ставит текущий `predictionTimeUtc`. Price model использует его для
+признака `days_before`. Обе модели получают один запрос с локальным временем вылета и его исходным смещением.
+Приложение отображает общий результат без сохранения прогнозов в MongoDB.
 
 Модель обучается на исторических наблюдениях о ценах и экспортируется в формат ONNX. Для выполнения прогнозирования используется ONNX Runtime Java. Отдельный Python-сервис для запуска модели не требуется.
 
@@ -455,13 +490,11 @@ UTC timestamp в момент запроса: price model использует �
 src/main/resources/models/price_model.onnx
 ```
 
-Модель должна находиться по этому пути до сборки проекта.
-
-**Важно:** файл модели не хранится в обычной Git-истории из-за большого размера. При распространении проекта необходимо включить его в ZIP-архив отдельно от GitHub-репозитория.
+Модель должна находиться по этому пути при запуске или быть доступна по `PRICE_MODEL_PATH`. Дистрибутив включает файл рядом с JAR и монтирует его в контейнер для чтения.
 
 Также в `pom.xml` должна быть подключена зависимость ONNX Runtime Java.
 
-#### Запуск прогнозирования
+#### Самостоятельный CLI модели цены
 
 Формат команды:
 

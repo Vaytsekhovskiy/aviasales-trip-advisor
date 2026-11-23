@@ -51,6 +51,22 @@
   </dependencies>
   <build>
     <finalName>avia-backend</finalName>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <excludes>
+          <exclude>models/price_model.onnx</exclude>
+        </excludes>
+      </resource>
+      <resource>
+        <directory>.</directory>
+        <targetPath>dictionaries</targetPath>
+        <includes>
+          <include>cities_cache_ru.json</include>
+          <include>airlines_cache_ru.json</include>
+        </includes>
+      </resource>
+    </resources>
     <plugins>
       <plugin>
         <groupId>org.springframework.boot</groupId>

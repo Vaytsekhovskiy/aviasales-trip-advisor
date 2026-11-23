@@ -2,7 +2,7 @@
 
 ## Назначение рефакторинга
 
-Java-приложение преобразовано в Spring Boot 3 backend на Java 17 и разделено по пяти учебным задачам. Математика агрегаторов, Mongo-схема, существующие HTML-renderers и Python ML не переписывались. Цель этого этапа — дать аналитике явные application-service boundaries, конфигурацию через environment и минимальную REST-основу для будущего frontend.
+Spring Boot 3 на Java 17 предоставляет один REST API и веб-интерфейс для пяти задач. REST использует существующие агрегаторы, Mongo-схемы и ML-модели. Старые CLI продолжают строить самостоятельные HTML-отчёты.
 
 Maven root временно оставлен в корне репозитория. Перенос всего проекта в `backend/` затронул бы множество рабочих относительных путей (`data/`, `reports/`, resources и standalone checks) и создавал бы риск, не связанный с package separation. Физическое разделение Java-кода выполнено полностью; перенос Maven root можно сделать отдельным контролируемым этапом.
 
@@ -33,7 +33,7 @@ Maven root временно оставлен в корне репозитори�
 
 ```mermaid
 flowchart TD
-    APP[AviaApplication] --> WEB[REST foundation]
+    APP[AviaApplication] --> WEB[REST API и веб-интерфейс]
     WEB --> REG[TaskRegistry]
     APP --> SERVICES[Task application services]
     SERVICES --> ANALYTICS[Existing aggregators and models]
@@ -44,10 +44,10 @@ flowchart TD
     ANALYTICS --> HTML[Existing HTML renderers]
 
     T5[Task 5] --> PRICE[Java price ONNX inference]
-    T5 --> DELAY[Python delay CatBoost in ml/]
+    T5 --> DELAY[Внутренний HTTP-сервис CatBoost]
 ```
 
-REST не читает готовый HTML. В будущем controller сможет вызывать тот же task service и возвращать JSON, тогда как compatibility CLI продолжит передавать результат в существующий renderer.
+REST возвращает JSON из task services. Веб-интерфейс строит графики и таблицы из этих данных, а CLI передаёт результаты тем же самостоятельным HTML-рендерерам.
 
 ## Package boundaries
 
@@ -61,9 +61,9 @@ REST не читает готовый HTML. В будущем controller смо�
 
 Task 3 не импортирует классы из `task5` и содержит только descriptive analytics. `FlightRecord`, `FlightHistoricalStats`, `FlightServiceIdentity`, порядок наблюдений и Mongo readers являются shared infrastructure, потому что используются и Task 3, и Task 5 delay.
 
-`avia.task5.model.FlightPredictionRequest` — единый публичный DTO будущего `POST /api/tasks/5/predict` для обеих
-веток Task 5. Python delay inference зеркалирует тот же JSON contract. Перед delay inference профиль проверяется по
-`_id` в `avia.predictable_flight_profiles`; отсутствие профиля возвращает `UNSUPPORTED_PROFILE` до CatBoost.
+`avia.task5.model.FlightPredictionRequest` — единый DTO `POST /api/tasks/5/predict`. Spring Boot проверяет, что
+конкретный будущий вылет входит в общий каталог, проставляет текущее время и передаёт одинаковые поля в ONNX
+и во внутренний HTTP-адаптер CatBoost. CatBoost также сверяет `_id` профиля в `predictable_flight_profiles`.
 
 ## Shared/common
 
@@ -74,7 +74,7 @@ Task 3 не импортирует классы из `task5` и содержит
 - `avia.common.flight` — нормализация, чтение/запись и shared flight domain.
 - `avia.common.price` — общие справочники, cleaning и чтение `offers_clean`.
 
-Collector и Cleaner остаются CLI-инструментами. Они не вызываются при старте Spring и не запускались в рамках рефакторинга.
+Пайплайны используют существующие collectors и предобработку. `PipelineJobs` выполняет одно обновление за раз, чтобы операции с общими коллекциями не пересекались. Чтение подготовленных данных не запускает сбор.
 
 ## Spring configuration
 
@@ -85,18 +85,22 @@ Entry point: `avia.AviaApplication` с `@SpringBootApplication` и `@Configurati
 | Property | Environment variable | Default |
 |---|---|---|
 | Mongo URI | `MONGO_URI` | `mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000` |
-| Mongo database | — | `avia` |
+| Mongo database | `MONGO_DATABASE` | `avia` |
 | Aviasales token | `AVIASALES_TOKEN` | empty |
 | AeroDataBox key | `AERODATABOX_API_KEY` | empty |
+| ONNX file | `PRICE_MODEL_PATH` | `src/main/resources/models/price_model.onnx` |
+| Delay service | `DELAY_SERVICE_URL` | `http://127.0.0.1:8090` |
 
 Mongo synchronous driver сохранён. `MongoClient` зарегистрирован как lazy Spring bean, поэтому запуск backend и unit tests не открывают соединение без реального потребителя. External API clients создаются условно только при наличии соответствующего credential. Реальные API requests при старте не выполняются.
 
-## REST foundation
+## REST и дистрибутив
 
 - `GET /api/health` → `{"status":"UP"}`.
 - `GET /api/tasks` → metadata ровно пяти задач из `TaskRegistry`.
 
-Analytics/chart endpoints намеренно отсутствуют на этом этапе.
+`/api/tasks/{id}/results` обслуживает задачи 1–4. Task 5 использует `/flights` и `/predict` внутри `/api/tasks/5`.
+`POST /api/tasks/{id}/pipeline` запускает фоновое обновление, а `GET /api/jobs/{jobId}` возвращает прогресс.
+Frontend поставляется в том же JAR в `src/main/resources/static`. Compose запускает Java, CatBoost и MongoDB, при первом запуске загружая готовый архив. Публичный порт на локальной машине есть только у Spring Boot.
 
 ## Запуск и проверка
 
@@ -133,7 +137,3 @@ java -Dloader.main=avia.MongoMain -jar target/avia-backend.jar <старые Mon
 | `avia.MongoPredictableFlightProfilesCli` | `avia.task5.delay.cli.MongoPredictableFlightProfilesCli` |
 | `avia.AviasalesPricesBulkCollectorCli` | `avia.common.aviasales.cli.AviasalesPricesBulkCollectorCli` |
 | `avia.AeroDataBoxBulkCollectorCli` | `avia.common.aerodatabox.cli.AeroDataBoxBulkCollectorCli` |
-
-## Future direction
-
-Следующий этап может добавлять task-specific REST controllers поверх `Task1Service`…`Task5*Service` и JSON DTO, не связывая REST с HTML. Python CatBoost delay-v2 пока не является REST service и остаётся самостоятельным компонентом Task 5. Артефакт `price_model.onnx` отсутствует; ONNX service загружает его лениво только при запросе inference, поэтому это известное ограничение не мешает запуску backend.

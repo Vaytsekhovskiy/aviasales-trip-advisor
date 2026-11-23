@@ -3,6 +3,8 @@ package avia.common.aerodatabox.mongo;
 import com.mongodb.client.MongoClient;
 import com.mongodb.client.MongoClients;
 import com.mongodb.client.MongoCollection;
+import com.mongodb.client.MongoDatabase;
+import avia.common.aerodatabox.AeroDataBoxBulkCollector;
 import com.mongodb.client.model.IndexOptions;
 import com.mongodb.client.model.ReplaceOptions;
 import org.bson.Document;
@@ -16,7 +18,7 @@ import static com.mongodb.client.model.Filters.eq;
 import static com.mongodb.client.model.Indexes.ascending;
 
 /** Independent raw-batch storage; never accesses Aviasales collections. */
-public final class MongoAeroDataBoxRawStorage implements AutoCloseable {
+public final class MongoAeroDataBoxRawStorage implements AutoCloseable, AeroDataBoxBulkCollector.Store {
     public static final String DATABASE = "avia";
     public static final String COLLECTION = "raw_aerodatabox";
     private static final Pattern FILE_NAME = Pattern.compile("([A-Za-z0-9]{3,4})_(\\d{2})-(\\d{2})\\.json");
@@ -39,6 +41,12 @@ public final class MongoAeroDataBoxRawStorage implements AutoCloseable {
             client.close();
             throw e;
         }
+    }
+
+    public MongoAeroDataBoxRawStorage(MongoDatabase database) {
+        client = null;
+        collection = database.getCollection(COLLECTION);
+        collection.createIndex(ascending("batch_key"), new IndexOptions().unique(true));
     }
 
     public record Batch(String airport, LocalDate date, int fromHour, int toHour) {
@@ -78,13 +86,15 @@ public final class MongoAeroDataBoxRawStorage implements AutoCloseable {
         return result.getUpsertedId() != null;
     }
 
-    @Override public void close() { client.close(); }
+    @Override public void close() { if (client != null) client.close(); }
 
+    @Override
     public boolean exists(String batchKey) {
         return collection.find(eq("batch_key", batchKey)).projection(new Document("_id", 1)).first() != null;
     }
 
     /** Never replace an existing raw batch, including a concurrent insertion. */
+    @Override
     public boolean insertIfAbsent(Document document) {
         return collection.updateOne(eq("batch_key", document.getString("batch_key")),
                 new Document("$setOnInsert", document), new com.mongodb.client.model.UpdateOptions().upsert(true))

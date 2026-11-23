@@ -15,6 +15,7 @@ import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.zip.GZIPInputStream;
@@ -26,8 +27,6 @@ import java.util.zip.GZIPInputStream;
  * чтобы построить сезонную тепловую карту без своего накопления истории.
  */
 public class AviasalesClient {
-
-    private static final String BASE_URL = "https://api.travelpayouts.com/v1/prices/calendar";
 
     private final HttpClient http;
     private final String token;
@@ -42,17 +41,38 @@ public class AviasalesClient {
     /** Raw prices_for_dates response; caller owns retries and snapshot persistence. */
     public String fetchPricesForDates(String origin, String destination, java.time.YearMonth month)
             throws IOException, InterruptedException {
+        return fetchPricesForDates(origin, destination, month, true);
+    }
+
+    public String fetchPricesForDates(String origin, String destination, YearMonth month, boolean directOnly)
+            throws IOException, InterruptedException {
         if (token == null || token.isBlank()) throw new IllegalArgumentException("AVIASALES_TOKEN is required");
         String url = pricesBase.resolve("/aviasales/v3/prices_for_dates").toString()
                 + "?origin=" + enc(origin) + "&destination=" + enc(destination) + "&departure_at=" + month
-                + "&one_way=true&direct=true&unique=false&sorting=price&currency=rub&market=ru&limit=1000&page=1"
+                + "&one_way=true&direct=" + directOnly + "&unique=false&sorting=price&currency=rub&market=ru&limit=1000&page=1"
                 + "&token=" + enc(token);
+        return getSnapshot(url);
+    }
+
+    private String getSnapshot(String url) throws IOException, InterruptedException {
         HttpRequest request = HttpRequest.newBuilder(URI.create(url))
                 .version(HttpClient.Version.HTTP_1_1)
                 .timeout(java.time.Duration.ofSeconds(45)).GET().build();
         HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
         if (response.statusCode() != 200) throw new HttpStatusException(response.statusCode());
         return decodeBody(response);
+    }
+
+    public JSONObject fetchCalendarData(String origin, String destination, YearMonth month, String currency)
+            throws IOException, InterruptedException {
+        String url = pricesBase.resolve("/v1/prices/calendar")
+                + "?origin=" + enc(origin)
+                + (destination == null ? "" : "&destination=" + enc(destination))
+                + "&departure_date=" + (month == null ? "" : month)
+                + "&calendar_type=departure_date&currency=" + enc(currency) + "&token=" + enc(token);
+        JSONObject root = new JSONObject(getSnapshot(url));
+        if (!root.optBoolean("success", false)) throw new IOException("Aviasales calendar response unsuccessful");
+        return root.getJSONObject("data");
     }
 
     public AviasalesClient(String token) {
@@ -70,39 +90,7 @@ public class AviasalesClient {
     public List<PriceEntry> fetchYearCalendar(String origin, String destination, String currency)
             throws IOException, InterruptedException {
 
-        String url = BASE_URL
-                + "?origin=" + enc(origin)
-                + "&destination=" + enc(destination)
-                + "&departure_date="                     // пусто = год вперёд
-                + "&calendar_type=departure_date"
-                + "&currency=" + enc(currency)
-                + "&token=" + enc(token);
-
-        // Читаем тело как байты, а не как String: java.net.http.HttpClient не
-        // распаковывает gzip сам, поэтому если сервер (или прокси) всё же
-        // пришлёт Content-Encoding: gzip, мы распакуем вручную ниже.
-        // Раньше здесь стоял заголовок "Accept-Encoding: gzip, deflate" —
-        // это как раз и приводило к ошибке "A JSONObject text must begin
-        // with '{'": в body() попадали сырые gzip-байты вместо JSON-текста.
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .GET()
-                .build();
-
-        HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
-
-        String bodyText = decodeBody(response);
-
-        if (response.statusCode() != 200) {
-            throw new IOException("Aviasales API вернул код " + response.statusCode() + ": " + bodyText);
-        }
-
-        JSONObject root = new JSONObject(bodyText);
-        if (!root.optBoolean("success", false)) {
-            throw new IOException("Aviasales API success=false, тело ответа: " + bodyText);
-        }
-
-        JSONObject data = root.getJSONObject("data");
+        JSONObject data = fetchCalendarData(origin, destination, null, currency);
         List<PriceEntry> result = new ArrayList<>();
 
         for (String dateKey : data.keySet()) {
@@ -126,31 +114,7 @@ public class AviasalesClient {
     public List<PriceEntry> fetchYearCalendarAnyDestination(String origin, String currency)
             throws IOException, InterruptedException {
 
-        String url = BASE_URL
-                + "?origin=" + enc(origin)
-                + "&departure_date="
-                + "&calendar_type=departure_date"
-                + "&currency=" + enc(currency)
-                + "&token=" + enc(token);
-
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(URI.create(url))
-                .GET()
-                .build();
-
-        HttpResponse<byte[]> response = http.send(request, HttpResponse.BodyHandlers.ofByteArray());
-        String bodyText = decodeBody(response);
-
-        if (response.statusCode() != 200) {
-            throw new IOException("Aviasales API вернул код " + response.statusCode() + ": " + bodyText);
-        }
-
-        JSONObject root = new JSONObject(bodyText);
-        if (!root.optBoolean("success", false)) {
-            throw new IOException("Aviasales API success=false, тело ответа: " + bodyText);
-        }
-
-        JSONObject data = root.getJSONObject("data");
+        JSONObject data = fetchCalendarData(origin, null, null, currency);
         List<PriceEntry> result = new ArrayList<>();
 
         for (String dateKey : data.keySet()) {

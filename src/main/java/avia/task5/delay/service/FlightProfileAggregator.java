@@ -12,7 +12,7 @@ public final class FlightProfileAggregator {
     public record PriceFlight(FlightProfileKey profile, OffsetDateTime departure) { }
     public static Optional<PriceFlight> priceFlight(Document d) {
         try {
-            var identity = new FlightServiceIdentity(d.getString("airline"), d.getString("flight_number"),
+            var identity = new FlightServiceIdentity(d.getString("airline"), Objects.toString(d.get("flight_number"), null),
                     d.getString("origin_airport"), d.getString("destination_airport"));
             var departure = OffsetDateTime.parse(d.getString("departure_at"));
             return Optional.of(new PriceFlight(new FlightProfileKey(identity, departure.getDayOfWeek(), departure.getHour()), departure));

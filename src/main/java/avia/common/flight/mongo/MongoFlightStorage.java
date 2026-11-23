@@ -15,25 +15,38 @@ import static com.mongodb.client.model.Indexes.ascending;
 public final class MongoFlightStorage implements AutoCloseable {
     public static final String DATABASE = "avia", SOURCE = "raw_aerodatabox", TARGET = "flights";
     private final MongoClient client;
+    private final MongoDatabase database;
     private final MongoCollection<Document> flights;
 
     public MongoFlightStorage() {
         String uri = System.getenv("MONGO_URI");
         if (uri == null || uri.isBlank()) throw new IllegalStateException("MONGO_URI is required");
         client = MongoClients.create(uri);
+        database = client.getDatabase(DATABASE);
         try {
-            flights = client.getDatabase(DATABASE).getCollection(TARGET);
-            flights.createIndex(ascending("flightId"), new IndexOptions().unique(true)
-                    .partialFilterExpression(new Document("flightId", new Document("$type", "string"))));
-            for (String field : List.of("flightServiceKey", "originIata", "destinationIata", "airlineIata", "scheduledDepartureUtc")) {
-                flights.createIndex(ascending(field));
-            }
+            flights = indexedFlights(database);
         } catch (RuntimeException e) { client.close(); throw e; }
+    }
+
+    public MongoFlightStorage(MongoDatabase database) {
+        client = null;
+        this.database = database;
+        flights = indexedFlights(database);
+    }
+
+    private static MongoCollection<Document> indexedFlights(MongoDatabase database) {
+        var collection = database.getCollection(TARGET);
+        collection.createIndex(ascending("flightId"), new IndexOptions().unique(true)
+                .partialFilterExpression(new Document("flightId", new Document("$type", "string"))));
+        for (String field : List.of("flightServiceKey", "originIata", "destinationIata", "airlineIata", "scheduledDepartureUtc")) {
+            collection.createIndex(ascending(field));
+        }
+        return collection;
     }
 
     /** Caller closes the cursor; source collection is read-only. */
     public MongoCursor<Document> rawBatches() {
-        return client.getDatabase(DATABASE).getCollection(SOURCE).find().sort(ascending("batch_key")).iterator();
+        return database.getCollection(SOURCE).find().sort(ascending("batch_key")).iterator();
     }
 
     public boolean save(MongoRawFlightNormalizer.Flight flight) {
@@ -72,5 +85,5 @@ public final class MongoFlightStorage implements AutoCloseable {
                 .projection(Projections.include("flightId", "flightServiceKey", "scheduledDepartureUtc",
                         "departureDelayMin", "arrivalDelayMin", "sourceBatchKeys")).into(new ArrayList<>());
     }
-    @Override public void close() { client.close(); }
+    @Override public void close() { if (client != null) client.close(); }
 }

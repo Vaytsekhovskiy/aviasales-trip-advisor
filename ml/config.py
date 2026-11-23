@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 from pathlib import Path
 
-DATABASE = "avia"
+DATABASE = os.environ.get("MONGO_DATABASE", "avia")
 FLIGHTS_COLLECTION = "flights"
 PROFILES_COLLECTION = "predictable_flight_profiles"
 RANDOM_SEED = 42

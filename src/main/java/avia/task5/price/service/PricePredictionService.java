@@ -4,7 +4,8 @@ import ai.onnxruntime.*;
 
 import avia.task5.model.FlightPredictionRequest;
 
-import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.nio.FloatBuffer;
 import java.nio.LongBuffer;
 import java.time.Duration;
@@ -14,30 +15,23 @@ import java.util.Map;
 
 public class PricePredictionService implements AutoCloseable {
 
-    private static final String MODEL_PATH =
-            "/models/price_model.onnx";
+    private static final String DEFAULT_MODEL_PATH = "src/main/resources/models/price_model.onnx";
 
     private final OrtEnvironment environment;
     private final OrtSession session;
 
     public PricePredictionService() throws Exception {
+        this(Path.of(System.getenv().getOrDefault("PRICE_MODEL_PATH", DEFAULT_MODEL_PATH)));
+    }
+
+    public PricePredictionService(Path model) throws Exception {
+        if (!Files.isRegularFile(model)) throw new IllegalStateException("Не найдена ONNX-модель: " + model);
         this.environment = OrtEnvironment.getEnvironment();
-
-        try (InputStream input = getClass()
-                .getResourceAsStream(MODEL_PATH)) {
-
-            if (input == null) {
-                throw new IllegalStateException(
-                        "Не найдена ONNX-модель: " + MODEL_PATH
-                );
-            }
-
-            byte[] modelBytes = input.readAllBytes();
-
-            this.session = environment.createSession(
-                    modelBytes,
-                    new OrtSession.SessionOptions()
-            );
+        try (var options = new OrtSession.SessionOptions()) {
+            options.setOptimizationLevel(OrtSession.SessionOptions.OptLevel.NO_OPT);
+            options.setIntraOpNumThreads(2);
+            options.setInterOpNumThreads(1);
+            this.session = environment.createSession(model.toAbsolutePath().toString(), options);
         }
     }
 

@@ -10,6 +10,7 @@ import static com.mongodb.client.model.Indexes.ascending;
 
 /** Append-only price observations. Legacy documents without snapshot_id remain untouched. */
 public final class MongoAviasalesPriceStorage implements AutoCloseable {
+    public static final String COLLECTION = "raw_prices_for_dates";
     private final MongoClient client;
     private final MongoCollection<Document> offers;
     public MongoAviasalesPriceStorage() {
@@ -17,10 +18,20 @@ public final class MongoAviasalesPriceStorage implements AutoCloseable {
         if (uri == null || uri.isBlank()) throw new IllegalArgumentException("MONGO_URI required");
         client = MongoClients.create(uri);
         try {
-            offers = client.getDatabase("avia").getCollection("raw_prices_for_dates");
-            offers.createIndex(ascending("snapshot_id"), new IndexOptions().unique(true)
-                    .partialFilterExpression(new Document("snapshot_id", new Document("$type", "string"))));
+            offers = snapshots(client.getDatabase("avia"));
         } catch (RuntimeException e) { client.close(); throw e; }
+    }
+
+    public MongoAviasalesPriceStorage(MongoDatabase database) {
+        client = null;
+        offers = snapshots(database);
+    }
+
+    private static MongoCollection<Document> snapshots(MongoDatabase database) {
+        var collection = database.getCollection(COLLECTION);
+        collection.createIndex(ascending("snapshot_id"), new IndexOptions().unique(true)
+                .partialFilterExpression(new Document("snapshot_id", new Document("$type", "string"))));
+        return collection;
     }
     /** Return number of new snapshots; matched snapshots are left byte-for-byte unchanged. */
     public int save(List<Document> documents) {
@@ -45,5 +56,5 @@ public final class MongoAviasalesPriceStorage implements AutoCloseable {
             return new AviasalesOfferAudit().audit(() -> cursor, history);
         }
     }
-    @Override public void close() { client.close(); }
+    @Override public void close() { if (client != null) client.close(); }
 }

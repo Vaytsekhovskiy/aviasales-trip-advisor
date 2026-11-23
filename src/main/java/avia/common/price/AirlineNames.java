@@ -72,6 +72,9 @@ public final class AirlineNames {
             // кэш — только оптимизация, при проблемах просто скачиваем заново
         }
 
+        try (var snapshot = AirlineNames.class.getResourceAsStream("/dictionaries/airlines_cache_ru.json")) {
+            if (snapshot != null) return new String(snapshot.readAllBytes(), StandardCharsets.UTF_8);
+        }
         HttpRequest request = HttpRequest.newBuilder().uri(URI.create(URL)).GET().build();
         HttpResponse<String> response = HttpClient.newHttpClient()
                 .send(request, HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));

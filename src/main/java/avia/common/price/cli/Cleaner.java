@@ -8,6 +8,10 @@ import com.mongodb.client.MongoDatabase;
 import com.mongodb.client.model.Filters;
 import com.mongodb.client.model.Indexes;
 import com.mongodb.client.model.Sorts;
+import com.mongodb.client.model.BulkWriteOptions;
+import com.mongodb.client.model.UpdateOneModel;
+import com.mongodb.client.model.UpdateOptions;
+import com.mongodb.client.model.WriteModel;
 import org.bson.Document;
 
 import java.time.LocalDate;
@@ -42,6 +46,8 @@ public class Cleaner {
 
     public static final String CLEAN = "offers_clean";
     private static final int BATCH = 1000;
+    private static final List<String> IDENTITY_FIELDS = List.of("origin", "destination", "depart_date", "airline",
+            "gate", "price", "transfers", "trip_type", "found_at");
 
     /** Как называются поля в каждом эндпоинте. null — такого поля нет. */
     private record Source(String name, String collection,
@@ -77,6 +83,32 @@ public class Cleaner {
             }
             System.out.println("Готово. Документов в offers_clean: " + clean.estimatedDocumentCount());
         }
+    }
+
+    /** Prepare selected raw observations without removing any existing snapshots. */
+    public static int cleanObservations(MongoDatabase db, String sourceName, Iterable<Document> observations) {
+        Source source = SOURCES.stream().filter(item -> sourceName.equals(item.name())).findFirst().orElseThrow();
+        MongoCollection<Document> clean = db.getCollection(CLEAN);
+        clean.createIndex(Indexes.ascending("source", "origin", "destination", "collected_at", "depart_date"));
+        List<WriteModel<Document>> writes = new ArrayList<>();
+        Set<String> seen = new HashSet<>();
+        int kept = 0;
+        for (Document raw : observations) {
+            Date collectedAt = raw.getDate("_collected_at");
+            if (collectedAt == null) continue;
+            Document normalized = convert(source, raw, collectedAt);
+            if (normalized == null || !seen.add(collectedAt.getTime() + "|" + duplicateKey(normalized))) continue;
+            Document filter = new Document("source", sourceName).append("collected_at", collectedAt);
+            IDENTITY_FIELDS.forEach(field -> filter.put(field, normalized.get(field)));
+            writes.add(new UpdateOneModel<>(filter, new Document("$setOnInsert", normalized), new UpdateOptions().upsert(true)));
+            kept++;
+            if (writes.size() == BATCH) {
+                clean.bulkWrite(writes, new BulkWriteOptions().ordered(false));
+                writes.clear();
+            }
+        }
+        if (!writes.isEmpty()) clean.bulkWrite(writes, new BulkWriteOptions().ordered(false));
+        return kept;
     }
 
     private static void cleanSource(MongoDatabase db, MongoCollection<Document> clean, Source source) {
@@ -187,12 +219,7 @@ public class Cleaner {
     }
 
     private static String duplicateKey(Document d) {
-        return String.join("|",
-                String.valueOf(d.get("origin")), String.valueOf(d.get("destination")),
-                String.valueOf(d.get("depart_date")), String.valueOf(d.get("airline")),
-                String.valueOf(d.get("gate")), String.valueOf(d.get("price")),
-                String.valueOf(d.get("transfers")), String.valueOf(d.get("trip_type")),
-                String.valueOf(d.get("found_at")));
+        return String.join("|", IDENTITY_FIELDS.stream().map(field -> String.valueOf(d.get(field))).toList());
     }
 
     private static void put(Document d, String key, Object value) {

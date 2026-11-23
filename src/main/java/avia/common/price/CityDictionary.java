@@ -40,6 +40,9 @@ public final class CityDictionary {
                 .orElseGet(() -> null);
 
         if (json == null) {
+            try (var snapshot = CityDictionary.class.getResourceAsStream("/dictionaries/cities_cache_" + lang + ".json")) {
+                if (snapshot != null) return parse(new String(snapshot.readAllBytes(), StandardCharsets.UTF_8));
+            }
             json = fetch(lang);
             try {
                 Files.writeString(cacheFile, json, StandardCharsets.UTF_8);

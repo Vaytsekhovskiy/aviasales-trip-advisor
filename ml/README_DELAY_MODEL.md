@@ -1,7 +1,7 @@
 # Departure delay model
 
-Standalone Python inference for the saved CatBoost `historicalMAE` model. It does not call Java,
-write predictions, expose an HTTP API, or modify MongoDB.
+Python inference for the saved CatBoost `historicalMAE` model. The standalone CLI and the internal
+`python -m ml.serve_delay` HTTP adapter use the same predictor. Both read MongoDB without persisting predictions.
 
 ## Model contract
 
@@ -89,10 +89,10 @@ route → airline → strictly-past global history. The cutoff remains the futur
 
 ## Availability and future UI
 
-The frontend must not construct arbitrary airline/flight/route/weekday/hour combinations. It should first list
-profiles from `avia.predictable_flight_profiles`, then offer concrete future instances matching those profiles.
-When a user selects a flight, the backend forms the common request and sets `predictionTimeUtc` to current UTC.
-The concrete future-instance listing is outside this inference component.
+Spring Boot lists concrete future departures from the price snapshots that match `predictable_flight_profiles`.
+When the user selects one, Spring Boot verifies the departure and sends the common request with current UTC
+to the ONNX and CatBoost predictors. The Python adapter listens on loopback by default. Compose keeps it
+on the internal network and publishes the Spring Boot port.
 
 ## Response and exit codes
 
