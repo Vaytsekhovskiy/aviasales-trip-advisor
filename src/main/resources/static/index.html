@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#102a43">
+  <title>Авиааналитика</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script src="/app.js" defer></script>
+</head>
+<body>
+  <a href="#content" class="skip">К содержимому</a>
+  <header class="site-header">
+    <div class="shell">
+      <div class="brand"><span class="brand-mark" aria-hidden="true">✈</span> Авиааналитика</div>
+      <nav class="tasks" aria-label="Задачи">
+        <a href="#task-1">Сезонность</a>
+        <a href="#task-2">Пересадки</a>
+        <a href="#task-3">Задержки</a>
+        <a href="#task-4">Авиакомпании</a>
+        <a href="#task-5">Прогноз</a>
+      </nav>
+    </div>
+  </header>
+  <main id="content" class="shell">
+    <div class="page-heading">
+      <h1 id="task-title"></h1>
+      <div class="modes" aria-label="Режим задачи">
+        <button type="button" data-mode="results" aria-pressed="true">Результаты</button>
+        <button type="button" data-mode="pipeline" aria-pressed="false">Обновить данные</button>
+      </div>
+    </div>
+    <div id="panel"></div>
+    <noscript><p>Включите JavaScript, чтобы открыть отчёты и запустить обновление данных.</p></noscript>
+  </main>
+</body>
+</html>

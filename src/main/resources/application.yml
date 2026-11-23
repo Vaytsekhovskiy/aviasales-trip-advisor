@@ -1,0 +1,19 @@
+spring:
+  application:
+    name: aviasales-trip-advisor
+
+server:
+  address: ${SERVER_ADDRESS:127.0.0.1}
+
+avia:
+  mongo:
+    uri: ${MONGO_URI:mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000}
+    database: ${MONGO_DATABASE:avia}
+  api:
+    aviasales:
+      token: ${AVIASALES_TOKEN:}
+    aerodatabox:
+      key: ${AERODATABOX_API_KEY:}
+  models:
+    price-path: ${PRICE_MODEL_PATH:src/main/resources/models/price_model.onnx}
+    delay-url: ${DELAY_SERVICE_URL:http://127.0.0.1:8090}

@@ -1,0 +1,8 @@
+**
+!deploy/
+!deploy/Dockerfile.delay
+!ml/
+!ml/*.py
+!models/
+!models/delay_model_v2.cbm
+!models/delay_model_v2_metadata.json

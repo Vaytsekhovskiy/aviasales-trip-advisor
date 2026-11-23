@@ -1,13 +1,16 @@
 *.html
 !src/main/resources/avia/delay-dashboard.html
 !src/main/resources/avia/offer-dashboard.html
+!src/main/resources/static/index.html
 *.csv
+!ml/output/*.csv
 .idea
 target
 src/main/resources/models/price_model.onnx
 data/
 .env
 .env.*
+!.env.example
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -15,3 +18,8 @@ __pycache__/
 pytest-cache-files-*/
 calendar-response.json
 offer-response.json
+models/*
+!models/.gitkeep
+!models/delay_model*.cbm
+!models/delay_model*_metadata.json
+avia_archive

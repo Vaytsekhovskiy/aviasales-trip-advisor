@@ -1,0 +1,76 @@
+x-mongo-environment: &mongo-environment
+  MONGO_URI: ${MONGO_URI:-mongodb://mongo:27017/?serverSelectionTimeoutMS=3000}
+  MONGO_DATABASE: ${MONGO_DATABASE:-avia}
+
+services:
+  mongo:
+    image: mongo:7.0.43
+    environment:
+      MONGO_INITDB_DATABASE: ${MONGO_DATABASE:-avia}
+    volumes:
+      - mongo-data:/data/db
+      - type: bind
+        source: ./avia_archive
+        target: /backup/avia_archive
+        read_only: true
+        bind:
+          create_host_path: false
+      - ./deploy/restore-archive.sh:/docker-entrypoint-initdb.d/10-restore-archive.sh:ro
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--host", "mongo", "--eval", "quit(db.runCommand({ ping: 1 }).ok ? 0 : 1)"]
+      interval: 5s
+      timeout: 4s
+      start_period: 120s
+      retries: 36
+
+  delay:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.delay
+    environment:
+      <<: *mongo-environment
+      DELAY_HOST: 0.0.0.0
+    depends_on:
+      mongo:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "from urllib.request import urlopen; urlopen('http://127.0.0.1:8090/health', timeout=2)"]
+      interval: 5s
+      timeout: 4s
+      start_period: 15s
+      retries: 10
+
+  app:
+    image: eclipse-temurin:17-jre
+    working_dir: /app
+    command: ["java", "-jar", "/app/avia-backend.jar"]
+    environment:
+      <<: *mongo-environment
+      SERVER_ADDRESS: 0.0.0.0
+      AVIASALES_TOKEN: ${AVIASALES_TOKEN:-}
+      AERODATABOX_API_KEY: ${AERODATABOX_API_KEY:-}
+      PRICE_MODEL_PATH: /price/price_model.onnx
+      DELAY_SERVICE_URL: http://delay:8090
+    volumes:
+      - type: bind
+        source: ./target/avia-backend.jar
+        target: /app/avia-backend.jar
+        read_only: true
+        bind:
+          create_host_path: false
+      - type: bind
+        source: ${AVIA_PRICE_MODEL_FILE:-./src/main/resources/models/price_model.onnx}
+        target: /price/price_model.onnx
+        read_only: true
+        bind:
+          create_host_path: false
+    ports:
+      - "127.0.0.1:${AVIA_HTTP_PORT:-8080}:8080"
+    depends_on:
+      mongo:
+        condition: service_healthy
+      delay:
+        condition: service_healthy
+
+volumes:
+  mongo-data:

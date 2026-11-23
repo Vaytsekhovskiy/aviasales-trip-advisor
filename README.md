@@ -1,4 +1,103 @@
-# Дашборд сезонности цен (Aviasales / Travelpayouts API)
+# Анализ и прогнозирование стоимости авиаперелётов (Aviasales / Travelpayouts API)
+
+Java-проект для анализа стоимости авиаперелётов, сезонности цен, влияния пересадок и авиакомпаний, а также прогнозирования стоимости конкретного будущего рейса с помощью машинного обучения.
+
+Проект использует данные Aviasales / Travelpayouts API, MongoDB и ML-модель, экспортированную в формат ONNX.
+
+## Единое приложение
+
+Spring Boot обслуживает REST и веб-интерфейс пяти задач на одном порту. Для аналитики приложение читает `avia.offers_clean` и `avia.flights`. Выбор рейсов для Task 5 использует `avia.raw_prices_for_dates` и `avia.predictable_flight_profiles`. Чтение результатов работает без ключей внешних API.
+
+### Запуск с готовыми данными
+
+Нужны JDK 17+, Maven и Docker Compose с Linux-контейнерами. Поместите сжатый дамп `avia_archive` в корень репозитория, а исходный `price_model.onnx` — в `src/main/resources/models/`. Для исходной модели размером 1,36 ГБ сначала сохраните компактное представление ONNX. Оно хранит индексы, пороги и веса тех же деревьев в массивах и выполняется в ONNX Runtime. Исходный файл сохраняется.
+
+```powershell
+mvn clean package
+python -m pip install onnx
+python deploy/compact_price_model.py src/main/resources/models/price_model.onnx target/price_model_runtime.onnx
+$env:AVIA_PRICE_MODEL_FILE = "./target/price_model_runtime.onnx"
+if (!(Test-Path .env)) { Copy-Item .env.example .env }
+docker compose up --build -d
+docker compose ps
+```
+
+Откройте [веб-интерфейс на localhost:8080](http://localhost:8080). При первом запуске Compose восстанавливает дамп в новый том MongoDB. Можно наблюдать за импортом через `docker compose logs -f mongo`. Следующие запуски используют этот том, включая загруженные через приложение данные.
+
+Для загрузки свежих данных укажите `AVIASALES_TOKEN` и `AERODATABOX_API_KEY` в `.env`. В форме обновления можно отключить запрос к источнику и обработать уже сохранённые сырые наблюдения. В Task 5 это пересчитает общий каталог из накопленной истории. `MONGO_DATABASE` задаёт имя базы для Java и Python. Compose читает `MONGO_URI` при использовании существующего экземпляра MongoDB. Без этой переменной используется MongoDB из Compose.
+
+Для выдачи готовой папки выполните `pwsh -File deploy/package.ps1 -RuntimePriceModel target/price_model_runtime.onnx` после сборки JAR и подготовки модели. Папка `target/avia-distribution` содержит JAR, Compose, конфигурацию, дамп и обе модели. Исходная модель сохранена в `models/original/price_model.onnx`. Получателю потребуется Docker Compose. ONNX-файл и дамп исключены из Git.
+
+### Разработка без Docker
+
+Запустите MongoDB с подготовленными данными и задайте `MONGO_URI` в обоих процессах. В одном терминале запустите Spring Boot, а для совместных прогнозов во втором поднимите Python-сервис.
+
+```powershell
+$env:MONGO_URI = "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000"
+mvn spring-boot:run
+```
+
+```powershell
+$env:MONGO_URI = "mongodb://127.0.0.1:27017/?serverSelectionTimeoutMS=3000"
+python -m pip install -r requirements.txt
+python -m ml.serve_delay
+```
+
+Java использует `PRICE_MODEL_PATH` для пути к модели и `DELAY_SERVICE_URL` для адреса CatBoost. Для переданной большой модели задайте `$env:PRICE_MODEL_PATH = "target/price_model_runtime.onnx"`. По умолчанию берутся `src/main/resources/models/price_model.onnx` и `http://127.0.0.1:8090`. Для просмотра аналитики и списка вылетов достаточно Java и MongoDB.
+
+### REST API
+
+| Метод и путь | Назначение |
+|---|---|
+| `GET /api/health`, `GET /api/tasks` | Проверка работы backend и список задач |
+| `GET /api/tasks/1/results` | Календарные теплокарты. Фильтры `origin`, `destination`, `month` |
+| `GET /api/tasks/2/results` | Прямые и пересадочные цены. Фильтры `origin`, `month`, `minPairs`, `allSnapshots` |
+| `GET /api/tasks/3/results` | История задержек. Фильтры `from`, `to`, `airports` (список IATA), `minSamples` |
+| `GET /api/tasks/4/results` | Цены авиакомпаний. Фильтры `origin`, `month`, `minPairs`, `minDestinations`, `directOnly`, `allSnapshots` |
+| `GET /api/tasks/5/flights` | Конкретные будущие вылеты. Фильтры `origin`, `destination`, `date` и номер страницы `page` |
+| `POST /api/tasks/5/predict` | Один `FlightPredictionRequest` и ответ с полями `flight`, `price`, `delay` |
+| `POST /api/tasks/{id}/pipeline` | Запуск фонового задания. Возвращает HTTP 202 и `jobId` |
+| `GET /api/jobs/{jobId}` | Статусы `QUEUED`, `COLLECTING`, `PREPROCESSING`, `ANALYZING`, `COMPLETED` или `FAILED` |
+
+В Task 2 и Task 4 приложение по умолчанию сопоставляет минимумы по датам из всех срезов, чтобы работали накопленные данные. `allSnapshots=false` включает сравнение внутри одного среза. В запросе обновления для задач 1, 2 и 4 используются `origin`, `destinations`, `month` и `maxRequests`, для задачи 3 — `airports`, `from`, `to` и `maxRequests` (лимит новых окон). Флаг `collect=false` отключает внешнюю загрузку. Для Task 5 принимаются `minDelayFlights`, `minPriceFlights` и параметры ценового сбора, если `collect=true`. Приложение выполняет одно обновление за раз, задания хранятся до перезапуска backend.
+
+Прежние команды доступны через `avia.Main`. Для примеров CLI из этого README определите функцию PowerShell в корне проекта.
+
+```powershell
+function J {
+    java '-Dloader.main=avia.Main' -jar target/avia-backend.jar @args
+}
+```
+
+## Содержание
+
+1. [Требования](#требования)
+2. [Получение API-токена](#получение-api-токена)
+3. [Сборка проекта](#сборка-проекта)
+   - [Отчёты напрямую из Aviasales](#отчёты-напрямую-из-aviasales)
+4. [Подготовка данных](#подготовка-данных)
+5. [Запуск задач](#запуск-задач)
+   - [Задача 1. Анализ сезонности цен](#задача-1-анализ-сезонности-цен)
+   - [Задача 2. Сравнение прямых и пересадочных рейсов](#задача-2-сравнение-прямых-и-пересадочных-рейсов)
+   - [Задача 3. Анализ задержек](#задача-3)
+   - [Задача 4. Сравнение стоимости перелётов разных авиакомпаний](#задача-4-сравнение-стоимости-перелётов-разных-авиакомпаний)
+   - [Задача 5. Прогнозирование стоимости авиаперелёта](#задача-5-прогнозирование-стоимости-авиаперелёта)
+6. [Результаты работы](#результаты-работы)
+7. [Ограничения источника данных](#ограничения-источника-данных)
+
+## Требования
+
+- Java 17 или новее.
+- Maven.
+- MongoDB для задач, использующих собранные и очищенные данные.
+- API-токен Travelpayouts для сбора данных.
+- ONNX-модель `price_model.onnx` для задачи 5.
+
+## Получение API-токена
+
+1. Войдите в личный кабинет. [Travelpayouts](https://www.travelpayouts.com)
+2. Скопируйте токен. [Раздел API-ключей](https://app.travelpayouts.com/profile/api-token)
+3. Укажите токен в `AVIASALES_TOKEN` в файле `.env` для Compose или в переменной окружения сеанса PowerShell для CLI.
 
 ## Объединение предложения Aviasales с историей рейса
 
@@ -77,16 +176,16 @@ JSON-контракт сверяется с [официальной специф
 Импорт сохранённого ответа с `withLeg=true` (ключ не нужен):
 
 ```powershell
-java -jar target/avia-seasonality.jar --delays-import response.json SVO 2026-10-03 00 12
+J --delays-import response.json SVO 2026-10-03 00 12
 ```
 
 Реальный запрос через RapidAPI — ключ задаётся в **той же PowerShell-сессии**, где запускается Java:
 
 ```powershell
 $env:AERODATABOX_API_KEY = "YOUR_RAPIDAPI_KEY"
-java -jar target/avia-seasonality.jar --delays-health UUEE
-java -jar target/avia-seasonality.jar --delays-airport SVO
-java -jar target/avia-seasonality.jar --delays SVO 2026-10-03 00 12
+J --delays-health UUEE
+J --delays-airport SVO
+J --delays SVO 2026-10-03 00 12
 ```
 
 Если ключ уже сохранён в пользовательских переменных Windows, перед запуском в новой
@@ -105,7 +204,7 @@ $env:AERODATABOX_API_KEY = [Environment]::GetEnvironmentVariable('AERODATABOX_AP
 Для применения справочника к уже собранным данным:
 
 ```powershell
-java -jar target/avia-seasonality.jar --delays-reprocess SVO 2026-10-03 00 12
+J --delays-reprocess SVO 2026-10-03 00 12
 ```
 
 Команда пересоздаёт CSV из `data/raw/` **без сети и ключа**, сохраняя исходный JSON и его
@@ -144,16 +243,16 @@ UTC используется для задержек, scheduled local time — �
 
 ```powershell
 # Предварительный план: без ключа, без сети и без расхода units.
-java -jar target/avia-seasonality.jar --delays-plan 2026-09-27 2026-10-03
+J --delays-plan 2026-09-27 2026-10-03
 
 # Сбор: явный верхний предел НОВЫХ FIDS-запросов, здесь 60.
-java -jar target/avia-seasonality.jar --delays-collect 2026-09-27 2026-10-03 60
+J --delays-collect 2026-09-27 2026-10-03 60
 
 # Отчёт: медиана задержки по локальному дню недели и часу вылета, N >= 30.
-java -jar target/avia-seasonality.jar --delays-report 2026-10-03 2026-10-03 30
+J --delays-report 2026-10-03 2026-10-03 30
 
 # Предварительный просмотр малых групп, не для статистических выводов.
-java -jar target/avia-seasonality.jar --delays-report 2026-10-03 2026-10-03 1
+J --delays-report 2026-10-03 2026-10-03 1
 ```
 
 Последний необязательный аргумент — список аэропортов через запятую. Для `--delays-report`
@@ -190,66 +289,228 @@ java -jar target/avia-seasonality.jar --delays-report 2026-10-03 2026-10-03 1
 Недельный срез **2026-09-27 — 2026-10-03**: [состав, проверки и ограничения](docs/FIVE_AIRPORT_WEEK_2026-09-27_2026-10-03.md).
 Собраны все 70 batches, 12 666 исходных записей; отчёты находятся в `reports/`.
 
-Небольшой Java-проект: строит тепловую карту «месяц × день недели вылета»,
-чтобы понять, когда дешевле лететь по выбранному направлению.
+## Сборка проекта
 
-## Как получить токен
-1. Зарегистрируйтесь в личном кабинете Travelpayouts: https://www.travelpayouts.com
-2. Профиль → API-ключ (Application programming interface):
-   https://app.travelpayouts.com/profile/api-token
-
-## Сборка
-
-```bash
-mvn clean package
+```powershell
+mvn package
 ```
 
-Соберётся `target/avia-seasonality.jar` (используется maven-shade-plugin,
-все зависимости уже внутри jar).
+Maven собирает `target/avia-backend.jar`. Команда `java -jar target/avia-backend.jar` запускает Spring Boot. Для команд CLI ниже используется функция `J` из раздела [«Единое приложение»](#единое-приложение).
 
-## Запуск
+### Отчёты напрямую из Aviasales
 
-```bash
-java -jar target/avia-seasonality.jar MOW BKK ВАШ_ТОКЕН rub
-java -jar target/avia-seasonality.jar MOW ВАШ_ТОКЕН rub
-java -jar target/avia-seasonality.jar --transfers MOW ВАШ_ТОКЕН rub
+В примерах `MOW` — город вылета, `BKK` — выбранное направление, `rub` — валюта. По умолчанию используются рубли.
+
+```powershell
+J MOW BKK $env:AVIASALES_TOKEN rub
+J MOW $env:AVIASALES_TOKEN rub
+J --transfers MOW $env:AVIASALES_TOKEN rub
 ```
 
-Параметры:
-- `ORIGIN` — IATA-код города вылета (например, `MOW` — Москва)
-- `DESTINATION` — IATA-код города назначения (например, `BKK` — Бангкок), опционален
-- `TOKEN` — партнёрский API-ключ
-- `CURRENCY` — необязательно, по умолчанию `rub`
+- С указанным направлением формируются `heatmap_ORIGIN_DESTINATION.html` и `raw_prices_ORIGIN_DESTINATION.csv`.
+- Для всех направлений из города формируются `heatmap_ORIGIN_any_destination.html` и `raw_prices_ORIGIN_any.csv`.
+- Режим `--transfers` формирует `transfers_comparison_ORIGIN.html`, `transfers_comparison_ORIGIN.csv` и `raw_transfers_ORIGIN.csv`. Отчёт сравнивает цены прямых рейсов и предложений с пересадками.
 
-## Результат
-Режим с `DESTINATION`:
-- `heatmap_ORIGIN_DESTINATION.html` — тепловая карта "когда дешевле лететь" по выбранному направлению
-- `raw_prices_ORIGIN_DESTINATION.csv` — сырые данные
+Режимы сезонности используют календарь `/v1/prices/calendar` с пустым `departure_date` и группируют цены по месяцам и дням недели. Режим `--transfers` использует `/v1/prices/cheap` с `destination=-` и рассчитывает разницу между прямым рейсом и самой дешёвой альтернативой с пересадками в рублях и процентах.
 
-Режим без `DESTINATION`:
-- `heatmap_ORIGIN_any_destination.html` — тепловая карта "куда дешевле лететь" (в ячейке направление + средняя цена)
-- `raw_prices_ORIGIN_any.csv` — сырые данные по разным направлениям
+## Подготовка данных
 
-Режим `--transfers` (сравнение прямых и пересадочных рейсов по направлениям):
-- `transfers_comparison_ORIGIN.html` — диаграмма и таблица: цена прямого рейса
-  vs 1 и 2 пересадок по каждому направлению из ORIGIN, отсортировано по выгоде
-  от пересадки
-- `transfers_comparison_ORIGIN.csv` — та же агрегированная таблица для pandas/Excel
-- `raw_transfers_ORIGIN.csv` — сырые предложения (направление, число пересадок, цена)
+Перед запуском аналитических задач необходимо сформировать набор данных в MongoDB.
 
-## Как это устроено
-Режимы сезонности используют метод `/v1/prices/calendar` с пустым `departure_date` —
-в этом случае Aviasales отдаёт одну (самую дешёвую) цену на **каждый день
-ближайшего года** одним запросом. Дальше в Java-коде это просто
-группируется по месяцу и дню недели и усредняется.
+### 1. Формирование списка маршрутов
 
-Режим `--transfers` использует метод `/v1/prices/cheap` с `destination=-`:
-одним запросом он отдаёт по каждому направлению из ORIGIN до трёх предложений,
-сгруппированных по числу пересадок (0/1/2). Java-код раскладывает их по
-направлениям и считает разницу между ценой прямого рейса и самой дешёвой
-пересадочной альтернативой — в рублях и в процентах.
+```powershell
+java '-Dloader.main=avia.common.aviasales.cli.RouteBuilder' -jar target/avia-backend.jar $env:AVIASALES_TOKEN routes_auto.txt
+```
+
+Создаётся файл `routes_auto.txt` со списком маршрутов.
+
+Этот шаг обычно выполняется один раз или при необходимости обновления списка маршрутов.
+
+### 2. Сбор данных
+
+```powershell
+java '-Dloader.main=avia.common.aviasales.cli.Collector' -jar target/avia-backend.jar $env:AVIASALES_TOKEN routes_auto.txt rub
+```
+
+Сбор данных выполняется через Travelpayouts API.
+
+Данные сохраняются в MongoDB в исходные коллекции `raw_*`.
+
+Если MongoDB недоступна, используются резервные файлы вида `fallback_<коллекция>.jsonl`.
+
+Сбор можно запускать регулярно для накопления новых наблюдений.
+
+### 3. Очистка данных
+
+После сбора необходимо выполнить:
+
+```powershell
+J --clean
+```
+
+Для полной пересборки очищенного слоя с нуля:
+
+```powershell
+J --clean --rebuild
+```
+
+В результате формируется коллекция `offers_clean`, которая используется аналитическими задачами.
+
+**Важно:** задачи, работающие в режиме `--mongo`, используют очищенные данные. Поэтому перед их запуском необходимо выполнить сбор и очистку.
+
+## Запуск задач
+
+### Задача 1. Анализ сезонности цен
+
+Анализ позволяет определить, в какие периоды года перелёты по выбранному направлению обходятся дешевле, а также сравнить направления по стоимости.
+
+**Анализ конкретного направления:**
+
+```bash
+J --mongo MOW BKK
+```
+
+Результат:
+
+- `heatmap_MOW_BKK_mongo.html` — тепловая карта сезонности цен для направления Москва — Бангкок.
+
+**Сравнение направлений из одного города:**
+
+```bash
+J --mongo MOW
+```
+
+Результат:
+
+- `heatmap_MOW_any_destination_mongo.html` — тепловая карта с направлениями и средней стоимостью перелётов.
+
+### Задача 2. Сравнение прямых и пересадочных рейсов
+
+Анализ сравнивает стоимость прямых перелётов и вариантов с одной или двумя пересадками для направлений из выбранного города.
+
+Команда:
+
+```bash
+J --mongo --transfers MOW
+```
+
+Результаты:
+
+- `transfers_comparison_MOW_mongo.html` — HTML-отчёт с тремя графиками.
+- `raw_transfer_premiums_MOW_mongo.csv` — таблица исходных агрегированных данных для дальнейшего анализа.
+
+Дополнительные параметры:
+
+- `--min-pairs N` — минимальное количество сравнений на направление (по умолчанию 3).
+- `--all-snapshots` — использовать самую дешёвую цену на дату по всем доступным срезам.
+
+Пример:
+
+```bash
+J --mongo --transfers MOW --min-pairs 5 --all-snapshots
+```
+
+### Задача 3
+
+**Анализ пространственно-временных факторов задержек авиарейсов в крупнейших аэропортах России**
+
+### Задача 4. Сравнение стоимости перелётов разных авиакомпаний
+
+Задача позволяет сравнить стоимость перелётов разных авиакомпаний из выбранного города или нескольких городов.
+
+**Сравнение авиакомпаний по всем городам из данных:**
+
+```bash
+J --mongo --airlines
+```
+
+Результаты:
+
+- `airlines_comparison_all_mongo.html` — HTML-отчёт со вкладками по городам.
+- `raw_airline_prices_all_mongo.csv` — исходные агрегированные данные.
+
+**Сравнение по нескольким выбранным городам:**
+
+```bash
+J --mongo --airlines MOW LED KZN
+```
+
+Результаты:
+
+- `airlines_comparison_all_mongo.html` — HTML-отчёт со вкладками по выбранным городам.
+- `raw_airline_prices_all_mongo.csv` — исходные агрегированные данные.
+
+**Сравнение для одного города:**
+
+```bash
+J --mongo --airlines MOW
+```
+
+Результаты:
+
+- `airlines_comparison_MOW_mongo.html` — HTML-отчёт для выбранного города.
+- `raw_airline_prices_MOW_mongo.csv` — исходные агрегированные данные.
+
+Дополнительные параметры:
+
+- `--min-pairs N` — минимальное количество сравнений на направление (по умолчанию 3).
+- `--all-snapshots` — использовать самые дешёвые цены на дату по всем срезам.
+- `--min-destinations N` — минимальное количество направлений для включения авиакомпании (по умолчанию 3).
+- `--any-transfers` — включить рейсы с пересадками. По умолчанию учитываются только прямые рейсы.
+
+### Задача 5. Прогнозирование стоимости авиаперелёта
+
+Задача использует обученную модель машинного обучения для прогнозирования стоимости конкретного будущего авиаперелёта.
+
+Цена и задержка получают единый `FlightPredictionRequest`:
+
+```json
+{
+  "airlineIata": "S7",
+  "flightNumber": "5104",
+  "originIata": "AER",
+  "destinationIata": "OVB",
+  "scheduledDeparture": "2026-11-21T13:20:00+03:00",
+  "predictionTimeUtc": "2026-11-17T11:20:00Z"
+}
+```
+
+Совместный прогноз доступен для конкретных будущих вылетов из ценовых снимков, которые совпадают с профилем из
+`avia.predictable_flight_profiles` по авиакомпании, номеру, аэропортам, локальному дню недели и часу. При запросе
+Spring Boot перепроверяет наличие вылета и ставит текущий `predictionTimeUtc`. Price model использует его для
+признака `days_before`. Обе модели получают один запрос с локальным временем вылета и его исходным смещением.
+Приложение отображает общий результат без сохранения прогнозов в MongoDB.
+
+Модель цены выполняется в ONNX Runtime Java. Задержку рассчитывает Python-сервис CatBoost `ml.serve_delay`.
+
+#### Подготовка модели
+
+Для работы необходим файл:
+
+```text
+src/main/resources/models/price_model.onnx
+```
+
+Модель должна находиться по этому пути при запуске или быть доступна по `PRICE_MODEL_PATH`. Дистрибутив включает файл рядом с JAR и монтирует его в контейнер для чтения.
+
+Также в `pom.xml` должна быть подключена зависимость ONNX Runtime Java.
+
+#### Самостоятельный CLI модели цены
+
+```powershell
+J --predict-price AIRLINE FLIGHT_NUMBER ORIGIN DESTINATION DEPARTURE_WITH_OFFSET PREDICTION_TIME_UTC
+J --predict-price S7 5104 AER OVB 2026-11-14T13:20:00+03:00 2026-11-03T10:00:00Z
+```
+
+`AIRLINE` — IATA-код авиакомпании, `FLIGHT_NUMBER` — номер рейса, `ORIGIN` и `DESTINATION` — коды аэропортов. Время вылета включает локальное смещение, а момент прогноза указывается в UTC и предшествует вылету. Команда выводит прогноз цены.
+
+## Результаты работы
+
+CLI сохраняет HTML-отчёты и CSV в рабочую директорию. Повторный запуск перезаписывает одноимённые файлы. HTML-отчёты открываются в браузере.
 
 ## Ограничения источника данных
+
 - Данные берутся из кэша поисков пользователей Aviasales (актуальность —
   до 7 дней), а не из "истории цен за прошлый год" в чистом виде — то есть
   это скорее срез "что ищут сейчас на ближайший год", а не ретроспектива.
@@ -257,4 +518,5 @@ java -jar target/avia-seasonality.jar --transfers MOW ВАШ_ТОКЕН rub
   карте помечены прочерком.
 - У метода `/v1/prices/calendar` лимит 10 запросов в секунду — в этом
   проекте используется один запрос на весь год, так что лимит не проблема.
+- Фактическая стоимость билета при покупке может отличаться от прогноза.
 
